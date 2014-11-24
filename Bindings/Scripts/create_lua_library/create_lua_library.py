@@ -287,7 +287,7 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
                         if pp["name"] == "" or pp["array"] == 1:
                             continue
 
-                        numGetVars = numGetVars + 1
+                        numGetVars += 1
 
                         pp["type"] = typeFilter(pp["type"])
                         if pidx == 0:
@@ -366,7 +366,7 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
                             wrappersHeaderOut += "}\n\n"
 
                         # Success
-                        pidx = pidx + 1
+                        pidx += 1
                     if numGetVars != 0:
                         luaClassBindingOut += "\tend\n"
                     if inherits:
@@ -521,7 +521,7 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
                                         cdoc.pop(0)
                                         luaDocOut += "\t\t\t\t\t\t<desc><![CDATA[%s]]></desc>\n" % (" ".join(cdoc).replace("\n", ""))
                                 luaDocOut += "\t\t\t\t\t</param>\n"
-                                paramIndex = paramIndex + 1
+                                paramIndex += 1
                         luaDocOut += "\t\t\t\t</params>\n"
 
                     luaDocOut += "\t\t\t</method>\n"
