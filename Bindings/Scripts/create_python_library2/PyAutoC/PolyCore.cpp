@@ -1,0 +1,32 @@
+
+PyAutoFunction_Register(getThreadID, long, 0);
+PyAutoFunction_Register(Update, bool, 0);
+PyAutoFunction_RegisterVoid(Render, 1, bool);
+PyAutoFunction_Register(systemUpdate, bool, 1, bool);
+PyAutoFunction_RegisterVoid(enableMouse, 1, bool);
+PyAutoFunction_RegisterVoid(captureMouse, 1, bool);
+PyAutoFunction_RegisterVoid(setCursor, 2, int, int);
+PyAutoFunction_RegisterVoid(lockMutex, 1, CoreMute);
+PyAutoFunction_Register(getFPS, Number, 0);
+PyAutoFunction_RegisterVoid(Shutdown, 0);
+PyAutoFunction_Register(isFullscreen, bool, 1, return);
+PyAutoFunction_Register(getXRes, Number, 0);
+PyAutoFunction_Register(getYRes, Number, 0);
+PyAutoFunction_Register(getBackingXRes, Number, 1, return);
+PyAutoFunction_Register(getBackingYRes, Number, 1, return);
+PyAutoFunction_RegisterVoid(getScreenInfo, 3, in, in, in);
+PyAutoFunction_Register(getScreenWidth, int, 0);
+PyAutoFunction_Register(getScreenHeight, int, 0);
+PyAutoFunction_RegisterVoid(createFolder, 4, const, const, const, int);
+PyAutoFunction_Register(saveFilePicker, String, 10, st, false, 4, int, bool, bool, int, int, bool, int);
+PyAutoFunction_RegisterVoid(openURL, 1, String);
+PyAutoFunction_Register(getTicks, int, 1, **);
+PyAutoFunction_Register(getTicksFloat, double, 0);
+PyAutoFunction_RegisterVoid(setUserPointer, 3, voi, String, String);
+PyAutoFunction_Register(getUserHomeDirectory, String, 0);
+PyAutoFunction_RegisterVoid(makeApplicationMain, 1, CoreMute);
+PyAutoFunction_RegisterVoid(removeThread, 1, Threade);
+PyAutoFunction_Register(checkSpecialKeyEvents, bool, 1, PolyKEY);
+PyAutoFunction_RegisterVoid(gainFocus, 0);
+PyAutoFunction_RegisterVoid(updateCore, 0);
+

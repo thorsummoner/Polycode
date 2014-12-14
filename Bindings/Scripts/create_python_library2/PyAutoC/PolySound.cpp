@@ -1,0 +1,38 @@
+
+PyAutoFunction_Register(defined, if, 2, __APPLE_, bool);
+PyAutoFunction_RegisterVoid(loadFile, 2, String, bool);
+PyAutoFunction_RegisterVoid(reloadProperties, 0);
+PyAutoFunction_RegisterVoid(Play, 1, bool);
+PyAutoFunction_RegisterVoid(Stop, 0);
+PyAutoFunction_RegisterVoid(setVolume, 1, Number);
+PyAutoFunction_Register(getVolume, Number, 0);
+PyAutoFunction_RegisterVoid(setPitch, 1, Number);
+PyAutoFunction_Register(getPitch, Number, 0);
+PyAutoFunction_Register(isPlaying, bool, 0);
+PyAutoFunction_RegisterVoid(setIsPositional, 1, bool);
+PyAutoFunction_RegisterVoid(setSoundPosition, 1, Vector3);
+PyAutoFunction_RegisterVoid(setSoundVelocity, 1, Vector3);
+PyAutoFunction_RegisterVoid(setSoundDirection, 1, Vector3);
+PyAutoFunction_RegisterVoid(setOffset, 1, int);
+PyAutoFunction_Register(getFileName, String, 0);
+PyAutoFunction_Register(getPlaybackDuration, Number, 0);
+PyAutoFunction_Register(getPlaybackTime, Number, 0);
+PyAutoFunction_RegisterVoid(seekTo, 1, Number);
+PyAutoFunction_Register(getOffset, int, 0);
+PyAutoFunction_Register(getSampleLength, int, 0);
+PyAutoFunction_RegisterVoid(setPositionalProperties, 2, Number, Number);
+PyAutoFunction_RegisterVoid(setReferenceDistance, 1, Number);
+PyAutoFunction_RegisterVoid(setMaxDistance, 1, Number);
+PyAutoFunction_Register(getReferenceDistance, Number, 0);
+PyAutoFunction_Register(getMaxDistance, Number, 0);
+PyAutoFunction_Register(loadBytes, ALuint, 6, const, int, int, ALsizei, int, bool);
+PyAutoFunction_Register(loadWAV, ALuint, 2, const, bool);
+PyAutoFunction_Register(loadOGG, ALuint, 2, const, bool);
+PyAutoFunction_Register(GenSource, ALuint, 1, ALuint);
+PyAutoFunction_Register(GenSource, ALuint, 0);
+PyAutoFunction_Register(checkALError, ALenum, 1, const);
+PyAutoFunction_RegisterVoid(soundError, 1, const);
+PyAutoFunction_RegisterVoid(soundCheck, 2, bool, const);
+PyAutoFunction_Register(readByte32, long, 1, const);
+PyAutoFunction_Register(readByte16, short, 1, const);
+
