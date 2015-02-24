@@ -1,0 +1,22 @@
+language: c++
+script: |
+    echo "<BUILD START>"
+    pwd
+    which cmake
+    cmake --version
+
+    python --version
+
+    # mkdir -p Dependencies/Build/Debug
+    # cd Dependencies/Build/Debug
+    # cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug ../..
+    # make
+    # mkdir ../Release
+    # cd ../Release
+    # cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release ../..
+    # make
+
+    # sudo apt-get install libsdl1.2debian libsdl1.2-dev
+
+
+    echo "<BUILD END>"
