@@ -45,7 +45,7 @@ def mkdir_p(path): # Same effect as mkdir -p, create dir and all necessary paren
 class LuaBlocks(object):
 	@staticmethod
 	def PtrLookupArray(prefix, className, ptr):
-		block = textwrap.dedent("""\
+		block = textwrap.dedent("""
 			if {ptr} == nil then return nil end
 			for i=1,count({ptr}) do
 				local __c  = _G["{classname}"]("__skip_ptr__")
@@ -56,7 +56,7 @@ class LuaBlocks(object):
 		""").format(
 			classname=className.replace("*", ""),
 			ptr=ptr,
-		).replace('\n', prefix.strip('\n') + '\n')
+		).replace('\n', '\n' + prefix.strip('\n')).lstrip('\n').rstrip(' \t')
 
 		return block
 
@@ -66,7 +66,7 @@ class LuaBlocks(object):
 			Note: We expect className to be a valid string.
 		"""
 
-	    block = textwrap.dedent("""\
+	    block = textwrap.dedent("""
 	        if {ptr} == nil then return nil end
 	        local __c = _G["{classname}"]("__skip_ptr__")
 	        __c.__ptr = {ptr}
@@ -74,7 +74,7 @@ class LuaBlocks(object):
 	    """).format(
 	        classname=className.replace("*", ""),
 	        ptr=ptr,
-	    ).replace('\n', prefix.strip('\n') + '\n')
+	    ).replace('\n', '\n' + prefix.strip('\n')).lstrip('\n').rstrip(' \t')
 
 	    return block
 
