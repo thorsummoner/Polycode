@@ -524,10 +524,9 @@ void Sprite::setName(String name) {
 }
 
 
-SpriteSet::SpriteSet(String fileName, ResourcePool *parentPool) : ResourcePool(fileName, parentPool) {
+SpriteSet::SpriteSet(const String &fileName, ResourcePool *parentPool) : ResourcePool(fileName, parentPool) {
     nextFrameIDIndex = 0;
     loadSpriteSet(fileName);
-    
 }
 
 void SpriteSet::loadSpriteSet(String fileName) {
@@ -788,12 +787,15 @@ void SpriteSet::clearFrames() {
     nextFrameIDIndex = 0;
 }
 
-void SpriteSet::createGridFrames(Number width, Number height, const Vector2 &defaultAnchor) {
+void SpriteSet::createGridFrames(unsigned int xCount, unsigned int yCount, const Vector2 &defaultAnchor) {
     
-    for(Number x = 0.0; x+width <= 1.0; x += width) {
-        for(Number y = 0.0; y+height <= 1.0; y += height) {
+    Number frameWidth = 1.0/(Number)xCount;
+    Number frameHeight = 1.0/(Number)yCount;
+    
+    for(int y = 0; y < yCount; y++) {
+        for(Number x = 0; x < xCount; x++) {
             SpriteFrame frame;
-            frame.coordinates = Polycode::Rectangle(x, y, width, height);
+            frame.coordinates = Polycode::Rectangle(x * frameWidth, y * frameHeight, frameWidth, frameHeight);
             frame.anchorPoint = defaultAnchor;
             addSpriteFrame(frame);
         }
