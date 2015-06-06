@@ -640,6 +640,9 @@ void OpenGLRenderer::setPerspectiveDefaults() {
 }
 
 void OpenGLRenderer::BeginRender() {
+    
+    Renderer::BeginRender();
+    
 	if(doClearBuffer) {
 		glClearColor(clearColor.r, clearColor.g, clearColor.b, clearColor.a);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -696,8 +699,13 @@ void OpenGLRenderer::createRenderTextures(Texture **colorBuffer, Texture **depth
 	glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, frameBufferID);     	
 	glGenTextures(1,&colorTexture);
 	glBindTexture(GL_TEXTURE_2D,colorTexture);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    if(textureFilteringMode == TEX_FILTERING_NEAREST) {
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    } else {
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    }
 	glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);	
 	
@@ -726,8 +734,13 @@ void OpenGLRenderer::createRenderTextures(Texture **colorBuffer, Texture **depth
 		glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, frameBufferID);     
 		glGenTextures(1,&depthTexture);
 		glBindTexture(GL_TEXTURE_2D,depthTexture);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        if(textureFilteringMode == TEX_FILTERING_NEAREST) {
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        } else {
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        }
 		glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
 		glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
 
@@ -1027,6 +1040,7 @@ void OpenGLRenderer::setVertexColor(Number r, Number g, Number b, Number a) {
 }
 
 void OpenGLRenderer::EndRender() {
+    Renderer::EndRender();
 ///	glFlush();
 //	glFinish();	
 }

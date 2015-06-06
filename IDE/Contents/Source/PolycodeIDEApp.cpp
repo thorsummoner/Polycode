@@ -32,11 +32,13 @@ PolycodeEditorManager *globalEditorManager;
 Scene *globalScene;
 
 #ifdef _WINDOWS
-PolycodeIDEApp::PolycodeIDEApp(PolycodeViewBase *view) : EventDispatcher() {
+PolycodeIDEApp::PolycodeIDEApp(PolycodeWinIDEView *view) : EventDispatcher() {
+core = new POLYCODE_CORE((PolycodeWinIDEView*)view, 1100, 700,false,false, 0, 0,60, -1, true);
 #else
 PolycodeIDEApp::PolycodeIDEApp(PolycodeView *view) : EventDispatcher() {
+core = new POLYCODE_CORE((PolycodeView*)view, 1100, 700,false,false, 0, 0,60, -1, true);
 #endif
-	core = new POLYCODE_CORE((PolycodeView*)view, 1100, 700,false,false, 0, 0,60, -1, true);
+	
 //	core->pauseOnLoseFocus = true;
     
 	printf("DIR: %s\n", core->getDefaultWorkingDirectory().c_str());
@@ -476,6 +478,9 @@ void PolycodeIDEApp::doRunProject() {
 	printf("Running project...\n");
 	stopProject();
 
+    debugger->resetDebugger();
+    frame->console->clearBacktraces();
+    
 	frame->showConsole();
 
 	String outPath = PolycodeToolLauncher::generateTempPath(projectManager->getActiveProject()) + ".polyapp";
@@ -863,7 +868,9 @@ void PolycodeIDEApp::handleEvent(Event *event) {
 						renameFile();
 					} else if(bEvent->command == "remove") {
 						removeFile();
-					}																				
+					} else if (bEvent->command == "close_project"){
+						closeProject();
+					}
 				break;
 			}
 		}

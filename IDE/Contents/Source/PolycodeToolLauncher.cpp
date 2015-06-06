@@ -51,19 +51,19 @@ void PolycodeRunner::runThread() {
 #if defined(__APPLE__) && defined(__MACH__)
 	String command = "../MacOS/PolycodePlayer";	
 	String inFolder = polycodeBasePath+"/Standalone/Player/PolycodePlayer.app/Contents/Resources";
-	String args = polyappPath;
+	String args = "\""+polyappPath+"\"";
 #elif defined _WINDOWS
 	String command = "\""+polycodeBasePath+"/Standalone/Player/PolycodePlayer.exe\"";
-	String args = polyappPath;
+	String args = "\""+polyappPath+"\"";
 	String inFolder = polycodeBasePath+"/Standalone/Player";
 #else
 	String command = "./PolycodePlayer";	
 	String inFolder = polycodeBasePath+"/Standalone/Player";
-	String args = polyappPath;
+	String args = "\""+polyappPath+"\"";
 #endif
 
 	String ret = CoreServices::getInstance()->getCore()->executeExternalCommand(command, args, inFolder);
-	CoreServices::getInstance()->getCore()->removeDiskItem(polyappPath);	
+	CoreServices::getInstance()->getCore()->removeDiskItem(polyappPath);
 }
 
 PolycodeToolLauncher::PolycodeToolLauncher() {
@@ -181,7 +181,7 @@ String PolycodeToolLauncher::importAssets(String sourceFile, String inFolder, bo
 }
 
 void PolycodeToolLauncher::openExternalEditor(String app, String file, String inFolder) {
-	GenericRunner *runner = new GenericRunner(app, "\""+file+"\"", inFolder);
+	GenericRunner *runner = new GenericRunner("\"" + app + "\"", "\"" + file + "\"", "\"" + inFolder + "\"");
 	CoreServices::getInstance()->getCore()->createThread(runner);
 }
 

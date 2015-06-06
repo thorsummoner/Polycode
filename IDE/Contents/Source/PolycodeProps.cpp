@@ -1365,6 +1365,10 @@ void TextureProp::handleEvent(Event *event) {
 		
 		std::vector<String> extensions;
 		extensions.push_back("png");
+		extensions.push_back("hdr");
+		extensions.push_back("jpg");
+		extensions.push_back("psd");
+		extensions.push_back("tga");
 		globalFrame->showAssetBrowser(extensions);
 	}
 }
@@ -1945,8 +1949,8 @@ void ShaderPassesSheet::handleEvent(Event *event) {
 					selectedProp = (ShaderPassProp*)props[i];
 					dispatchEvent(new Event(), Event::SELECT_EVENT);				
 				} else if(event->getEventCode() == Event::REMOVE_EVENT) {
-					removeIndex = i;
-					dispatchEvent(new Event(), Event::REMOVE_EVENT);					
+					removeIndex = i-1;
+					dispatchEvent(new Event(), Event::REMOVE_EVENT);
 				}
 			}
 		}
@@ -2117,7 +2121,7 @@ void RenderTargetsSheet::handleEvent(Event *event) {
 		if(event->getDispatcher() == props[i] && event->getEventType() == "") {
 			switch(event->getEventCode()) {						
 				case Event::CANCEL_EVENT:
-					removeIndex = i;
+					removeIndex = i-1;
 				break;
 				case Event::CHANGE_EVENT:
 				break;				
@@ -2845,6 +2849,13 @@ SceneMeshSheet::SceneMeshSheet() : PropSheet("SCENE MESH", "scene_mesh") {
     
     gpuSkinningProp = new BoolProp("GPU Skinning");
     addProp(gpuSkinningProp);
+    
+    backfaceCullProp = new BoolProp("Backface culling");
+    addProp(backfaceCullProp);
+
+    alphaTestProp = new BoolProp("Alpha test");
+    addProp(alphaTestProp);
+    
 }
 
 SceneMeshSheet::~SceneMeshSheet() {
@@ -2857,6 +2868,8 @@ void SceneMeshSheet::setSceneMesh(SceneMesh *mesh) {
     if(sceneMesh) {
         
         gpuSkinningProp->set(sceneMesh->sendBoneMatricesToMaterial);
+        backfaceCullProp->set(sceneMesh->backfaceCulled);
+        alphaTestProp->set(sceneMesh->alphaTest);
         
         enabled = true;
     } else {
@@ -2871,7 +2884,12 @@ void SceneMeshSheet::handleEvent(Event *event) {
     
     if(event->getDispatcher() == gpuSkinningProp) {
         sceneMesh->sendBoneMatricesToMaterial = gpuSkinningProp->get();
+    } else if(event->getDispatcher() == backfaceCullProp) {
+        sceneMesh->backfaceCulled = backfaceCullProp->get();
+    } else if(event->getDispatcher() == alphaTestProp) {
+        sceneMesh->alphaTest = alphaTestProp->get();
     }
+
     
     PropSheet::handleEvent(event);
 }

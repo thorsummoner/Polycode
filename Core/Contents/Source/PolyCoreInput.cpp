@@ -40,6 +40,7 @@ namespace Polycode {
 	CoreInput::CoreInput() : EventDispatcher() {
 		clearInput();
 		simulateTouchWithMouse = false;
+		simulateTouchAsPen = false;
 		simulateMouseWithTouch = false;
 		ignoreOffScreenTouch = false;
         keyRepeat = true;
@@ -63,7 +64,7 @@ namespace Polycode {
 	}
 	
 	JoystickInfo *CoreInput::getJoystickInfoByIndex(unsigned int index) {
-        if(index > joysticks.size()-1) {
+        if(index > joysticks.size()-1 || joysticks.size() == 0) {
             return NULL;
         }
 		return &joysticks[index];
@@ -174,7 +175,10 @@ namespace Polycode {
 		if(simulateTouchWithMouse) {
 			TouchInfo touch;
 			touch.position = mousePosition;
-			touch.id = 0;			
+			touch.id = 0;
+			if (simulateTouchAsPen){
+				touch.type = TouchInfo::TYPE_PEN;
+			}
 			std::vector<TouchInfo> touches;
 			touches.push_back(touch);
 			
@@ -203,21 +207,19 @@ namespace Polycode {
 		dispatchEvent(evt, InputEvent::EVENT_MOUSEMOVE);
 		
 		if(simulateTouchWithMouse) {
-		
-		
-		
 			TouchInfo touch;
 			touch.position = mousePosition;
 			touch.id = 0;			
+			if (simulateTouchAsPen){
+				touch.type = TouchInfo::TYPE_PEN;
+			}
 			std::vector<TouchInfo> touches;
-			touches.push_back(touch);
 
-			if(!mouseButtons[MOUSE_BUTTON1]) {
-				mouseButtons[MOUSE_BUTTON1] = true;
-				touchesBegan(touch, touches, ticks);
-			}										
-			touchesMoved(touch, touches, ticks);
-		}		
+			touches.push_back(touch);
+			if(mouseButtons[MOUSE_BUTTON1]) {
+                touchesMoved(touch, touches, ticks);
+            }
+		}
 	}
 	
 	Vector2 CoreInput::getMouseDelta() {
@@ -292,6 +294,12 @@ namespace Polycode {
 			setMousePosition(touch.position.x, touch.position.y, ticks);
 		}
 	}
+
+
+
+
+
+
 	
 	void CoreInput::touchesEnded(TouchInfo touch, std::vector<TouchInfo> touches, int ticks) {
 		if(ignoreOffScreenTouch) {

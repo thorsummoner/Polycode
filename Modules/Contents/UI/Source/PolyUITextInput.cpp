@@ -141,7 +141,6 @@ UITextInput::UITextInput(bool multiLine, Number width, Number height) : UIElemen
 	textContainer->setPosition(padding + decoratorOffset, padding + textInputOffsetY);
 	
 	inputRect->addEventListener(this, InputEvent::EVENT_MOUSEDOWN);
-	inputRect->addEventListener(this, InputEvent::EVENT_MOUSEUP);	
 	inputRect->addEventListener(this, InputEvent::EVENT_MOUSEWHEEL_DOWN);
 	inputRect->addEventListener(this, InputEvent::EVENT_MOUSEWHEEL_UP);	
 	inputRect->addEventListener(this, InputEvent::EVENT_DOUBLECLICK);		
@@ -221,6 +220,7 @@ UITextInput::UITextInput(bool multiLine, Number width, Number height) : UIElemen
 	indentType = INDENT_TAB;
 	
 	core->getInput()->addEventListener(this, InputEvent::EVENT_KEYDOWN);
+	core->getInput()->addEventListener(this, InputEvent::EVENT_MOUSEUP);
 }
 
 void UITextInput::checkBufferLines() {
@@ -1655,6 +1655,7 @@ void UITextInput::Copy() {
 void UITextInput::Paste() {
 	saveUndoState();
 	String clip = CoreServices::getInstance()->getCore()->getClipboardString().replace("\r\n", "\n");
+	clip = clip.replace("\r", "\n");
 	insertText(clip);
 }
 
@@ -1849,17 +1850,43 @@ void UITextInput::onKeyDown(PolyKEY key, wchar_t charCode) {
 	}
 
 	if(key == KEY_HOME) {
-		if(multiLine) {
-			scrollContainer->setScrollValue(0, 0);
-		
+		if (actualCaretPosition < lines[actualLineOffset].text.length() || lineOffset + 1 < lines.size()) {
+			if (input->getKeyState(KEY_LSHIFT) || input->getKeyState(KEY_RSHIFT)) {
+				// Holding down shift allows you to select with the arrow keys.
+				if (hasSelection) {
+					setSelection(actualLineOffset, selectionLine, actualCaretPosition, 0);
+				} else {
+					setSelection(actualLineOffset, actualLineOffset, actualCaretPosition, 0);
+				}
+			} else {
+				clearSelection();
+
+				int newLineEnd = actualLineOffset;
+				actualCaretPosition = 0;
+				actualLineOffset = newLineEnd;
+			}
+			updateCaretPosition();
 		}
 		return;
 	}
 	
 	if(key == KEY_END) {
-		if(multiLine) {
-			scrollContainer->setScrollValue(0, 1);
-		
+		if (actualCaretPosition < lines[actualLineOffset].text.length() || lineOffset + 1 < lines.size()) {
+			if (input->getKeyState(KEY_LSHIFT) || input->getKeyState(KEY_RSHIFT)) {
+				// Holding down shift allows you to select with the arrow keys.
+				if (hasSelection) {
+					setSelection(actualLineOffset, selectionLine, actualCaretPosition, lines[selectionLine].text.length());
+				} else {
+					setSelection(actualLineOffset, actualLineOffset, actualCaretPosition, lines[actualLineOffset].text.length());
+				}
+			} else {
+				clearSelection();
+
+				int newLineEnd = actualLineOffset;
+				actualCaretPosition = lines[actualLineOffset].text.length();
+				actualLineOffset = newLineEnd;
+			}
+			updateCaretPosition();
 		}
 		return;
 	}
@@ -2396,7 +2423,7 @@ void UITextInput::updateWordWrap(int lineStart, int lineEnd) {
 void UITextInput::readjustBuffer(int lineStart, int lineEnd) {
 
 	if(scrollContainer) {
-		scrollContainer->getVScrollBar()->setTickSize((UI_TEXT_INPUT_SCROLL_SPEED * lineHeight) /scrollContainer->getContentSize().y);
+		scrollContainer->getVScrollBar()->setTickSize((UI_TEXT_INPUT_SCROLL_SPEED * lineHeight) / scrollContainer->getContentSize().y);
 	}
 	
 	if(lineEnd == -1) {
@@ -2468,6 +2495,9 @@ void UITextInput::handleEvent(Event *event) {
 			InputEvent *inputEvent = (InputEvent*) event;
 			onKeyDown(inputEvent->key, inputEvent->charCode);
 		}
+		if (event->getEventCode() == InputEvent::EVENT_MOUSEUP) {
+			draggingSelection = false;
+		}
 	}
 
 	if(event->getDispatcher() == contextMenu) {
@@ -2537,9 +2567,6 @@ void UITextInput::handleEvent(Event *event) {
 					dragMouseStart = ((InputEvent*)event)->mousePosition;
 					draggingSelection = true;
 				}
-			break;
-			case InputEvent::EVENT_MOUSEUP:
-				draggingSelection = false;
 			break;
 			case InputEvent::EVENT_MOUSEWHEEL_UP:
 				if(scrollContainer) {

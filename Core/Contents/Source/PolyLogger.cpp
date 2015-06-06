@@ -46,11 +46,14 @@ LoggerEvent::~LoggerEvent() {
 
 Logger::Logger() : EventDispatcher() {
 	logToFile = false;
-	logFile = fopen("poly.log", "w");
+    logFile = NULL;
 }
 
 Logger::~Logger() {
-	fclose(logFile);
+    if(logFile) {
+        fclose(logFile);
+    }
+    overrideInstance = NULL;
 }
 
 void Logger::logBroadcast(String message) {
@@ -69,9 +72,20 @@ void Logger::log(const char *format, ...) {
 	va_end(args);
 	
 	if (Logger::getInstance()->getLogToFile()){
-		va_start(args, format);
-		vfprintf(Logger::getInstance()->getLogFile(), format, args);
-		va_end(args);
+		if (Logger::getInstance()->getLogFile()){
+			va_start(args, format);
+			vfprintf(Logger::getInstance()->getLogFile(), format, args);
+            fflush(Logger::getInstance()->getLogFile());
+			va_end(args);
+		} else {
+			time_t t = time(NULL);
+			char mbstr[100];
+			if (strftime(mbstr, sizeof(mbstr), "%y_%m_%d.log", localtime(&t))) {
+				Logger::getInstance()->setLogFile(fopen((const char*)mbstr, "w"));
+			} else {
+				Logger::getInstance()->setLogFile(fopen("poly.log", "w"));
+			}
+		}
 	}
 
 #ifdef _MSC_VER
@@ -101,8 +115,6 @@ void Logger::setLogToFile(bool val){
 		time_t t = time(NULL);
 		char mbstr[100];
 		if (strftime(mbstr, sizeof(mbstr), "%y_%m_%d.log", localtime(&t))) {
-			//if (logFile)
-			//	fclose(logFile);
 			logFile = fopen((const char*)mbstr, "w");
 		} else {
 			logFile = fopen("poly.log", "w");
@@ -110,6 +122,10 @@ void Logger::setLogToFile(bool val){
 	}
 
 	logToFile = val;
+}
+
+void Logger::setLogFile(FILE *f){
+	logFile = f;
 }
 
 bool Logger::getLogToFile(){
@@ -126,6 +142,5 @@ Logger *Logger::getInstance(){
 	}
 
 	overrideInstance = new Logger;
-	//Logger::log("Creating new logger instance...\n");
 	return overrideInstance;
 }

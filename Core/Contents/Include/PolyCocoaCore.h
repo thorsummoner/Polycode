@@ -59,6 +59,9 @@ namespace Polycode {
 		int mouseX;
 		int mouseY;
 		
+        std::vector<TouchInfo> touches;
+        TouchInfo touch;
+        
 		PolyKEY keyCode;
 		wchar_t unicodeChar;
 		
@@ -89,6 +92,7 @@ namespace Polycode {
 		public:
 			GamepadDeviceEntry() {
 				numAxes = 0;
+                numButtons = 0;
 			}
 			vector<HIDGamepadAxis> axisElements;
 			vector<HIDGamepadButton> buttonElements;			
