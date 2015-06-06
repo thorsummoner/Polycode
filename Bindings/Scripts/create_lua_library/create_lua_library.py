@@ -34,13 +34,23 @@ class LuaBlocks(object):
 
 		return block
 
-# Note we expect className to be a valid string
-def template_returnPtrLookup(prefix, className, ptr):
-	out = "%sif %s == nil then return nil end\n" % (prefix, ptr)
-	out += "%slocal __c = _G[%s](\"__skip_ptr__\")\n" % (prefix, className.replace("*", ""))
-	out += "%s__c.__ptr = %s\n" % (prefix, ptr)
-	out += "%sreturn __c\n" % (prefix)
-	return out
+	@staticmethod
+	def PtrLookup(prefix, className, ptr):
+		"""
+			Note: We expect className to be a valid string.
+		"""
+
+	    block = textwrap.dedent("""\
+	        if {ptr} == nil then return nil end
+	        local __c = _G[{classname}]("__skip_ptr__")
+	        __c.__ptr = {ptr}
+	        return __c
+	    """).format(
+	        classname=className.replace("*", ""),
+	        ptr=ptr,
+	    ).replace('\n', prefix.strip('\n') + '\n')
+
+	    return block
 
 def template_quote(str):
 	return "\"%s\"" % str;
@@ -297,7 +307,7 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 						# If type is a class
 						else:
 							luaClassBindingOut += "\t\tlocal retVal = %s.%s_get_%s(self.__ptr)\n" % (libName, ckey, pp["name"])
-							luaClassBindingOut += template_returnPtrLookup("\t\t", template_quote(pp["type"]), "retVal")
+							luaClassBindingOut += LuaBlocks.PtrLookup("\t\t", template_quote(pp["type"]), "retVal")
 
 
 						luaDocOut += "\t\t\t<member name=\"%s\" type=\"%s\">\n" % (pp["name"],  toLuaType(typeFilter(pp["type"])))
@@ -750,7 +760,7 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 									luaClassBindingOut += LuaBlocks.PtrLookupArray("\t",template_quote(className),"retVal")
 								else:
 									className = pm["rtnType"].replace("const", "").replace("&", "").replace("inline", "").replace("virtual", "").replace("static", "").replace("*","").replace(" ", "")
-									luaClassBindingOut += template_returnPtrLookup("\t",template_quote(className),"retVal")
+									luaClassBindingOut += LuaBlocks.PtrLookup("\t",template_quote(className),"retVal")
 						luaClassBindingOut += "end\n\n" # Close out Lua generation
 
 					parsed_methods.append(pm["name"]) # Method parse success
