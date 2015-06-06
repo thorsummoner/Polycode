@@ -28,14 +28,30 @@ using namespace Polycode;
 UIGlobalMenu *globalMenu;
 SyntaxHighlightTheme *globalSyntaxTheme;
 PolycodeClipboard *globalClipboard;
+PolycodeEditorManager *globalEditorManager;
+Scene *globalScene;
 
-
+#ifdef _WINDOWS
+PolycodeIDEApp::PolycodeIDEApp(PolycodeWinIDEView *view) : EventDispatcher() {
+core = new POLYCODE_CORE((PolycodeWinIDEView*)view, 1100, 700,false,false, 0, 0,60, -1, true);
+#else
 PolycodeIDEApp::PolycodeIDEApp(PolycodeView *view) : EventDispatcher() {
-	core = new POLYCODE_CORE(view, 1100, 700,false,true, 0, 0,90, -1);	
+core = new POLYCODE_CORE((PolycodeView*)view, 1100, 700,false,false, 0, 0,60, -1, true);
+#endif
+	
 //	core->pauseOnLoseFocus = true;
+    
+	printf("DIR: %s\n", core->getDefaultWorkingDirectory().c_str());
+
+    Entity::defaultBlendingMode = Renderer::BLEND_MODE_NONE;
 	
-	CoreServices::getInstance()->getResourceManager()->reloadResourcesOnModify = true;
+    ResourcePool::defaultReloadResourcesOnModify = true;
+    Resource::defaultReloadOnFileModify = true;
+    
+	CoreServices::getInstance()->getResourceManager()->getGlobalPool()->reloadResourcesOnModify = true;
 	
+    CoreServices::getInstance()->getMaterialManager()->mipmapsDefault = true;    
+    
 	runNextFrame = false;
 	
 	core->addEventListener(this, Core::EVENT_CORE_RESIZE);
@@ -57,34 +73,64 @@ PolycodeIDEApp::PolycodeIDEApp(PolycodeView *view) : EventDispatcher() {
 	CoreServices::getInstance()->getResourceManager()->addArchive("Physics2D.pak");
 	CoreServices::getInstance()->getResourceManager()->addArchive("Physics3D.pak");
 	CoreServices::getInstance()->getResourceManager()->addArchive("UI.pak");
+
+	CoreServices::getInstance()->getResourceManager()->addDirResource("Materials");	
 			
-	CoreServices::getInstance()->getConfig()->loadConfig("Polycode", "UIThemes/default/theme.xml");
-	CoreServices::getInstance()->getResourceManager()->addArchive("UIThemes/default/");
-	CoreServices::getInstance()->getResourceManager()->addArchive("Images/");	
+	CoreServices::getInstance()->getFontManager()->registerFont("section", "Fonts/RobotoCondensed-Bold.ttf");
 
-	CoreServices::getInstance()->getFontManager()->registerFont("section", "Fonts/Roboto-Thin.ttf");
 
-	CoreServices::getInstance()->getRenderer()->clearColor.setColorHexFromString(CoreServices::getInstance()->getConfig()->getStringValue("Polycode", "uiBgColor"));
+	CoreServices::getInstance()->getRenderer()->setTextureFilteringMode(Renderer::TEX_FILTERING_LINEAR);
+//	CoreServices::getInstance()->getRenderer()->setTextureFilteringMode(Renderer::TEX_FILTERING_NEAREST);
+	
+	loadConfigFile();	
 
-//	CoreServices::getInstance()->getRenderer()->setTextureFilteringMode(Renderer::TEX_FILTERING_LINEAR);
-	CoreServices::getInstance()->getRenderer()->setTextureFilteringMode(Renderer::TEX_FILTERING_NEAREST);
+	String themeName = CoreServices::getInstance()->getConfig()->getStringValue("Polycode", "uiTheme");
+	
+    if(core->getBackingXRes() == core->getXRes()) {
+        CoreServices::getInstance()->getResourceManager()->addArchive("Images");
+    } else {
+        CoreServices::getInstance()->getResourceManager()->addArchive("ImagesRetina");
+        if(OSBasics::fileExists("UIThemes/"+themeName+"_retina")) {
+            themeName = themeName + "_retina";
+        }
+    }
+    
+    printf("LOADING THEME: %s\n", themeName.c_str());
+    
+	CoreServices::getInstance()->getConfig()->loadConfig("Polycode", "UIThemes/"+themeName+"/theme.xml");
+	CoreServices::getInstance()->getResourceManager()->addArchive("UIThemes/"+themeName+"/");
+    
 	
 	willRunProject = false;
 
+	SceneLabel::defaultAnchor = Vector3(-1.0, -1.0, 0.0);
+	SceneLabel::defaultPositionAtBaseline = true;
+	SceneLabel::defaultSnapToPixels = true;
+	SceneLabel::createMipmapsForLabels = false;
+			
 	globalMenu	= new UIGlobalMenu();
 	UITextInput::setMenuSingleton(globalMenu);
 			
-	printf("creating font editor\n"); 
 	
-	Screen *screen = new Screen();	
-	screen->rootEntity.setDefaultScreenOptions(true);
+	Scene *screen = new Scene(Scene::SCENE_2D_TOPLEFT);
+    
+    screen->doVisibilityChecking(false);
+    screen->getDefaultCamera()->frustumCulling = false;
+    
+    globalScene = screen;
+    
+	screen->rootEntity.processInputEvents = true;
+//	screen->rootEntity.setDefaultScreenOptions(true);
+
+	screen->clearColor.setColorHexFromString(CoreServices::getInstance()->getConfig()->getStringValue("Polycode", "uiBgColor"));	
+	screen->useClearColor = true;
 	
 	editorManager = new PolycodeEditorManager();
+	globalEditorManager = editorManager;
 	
-	frame = new PolycodeFrame();
-	frame->setPositionMode(ScreenEntity::POSITION_TOPLEFT);
+	frame = new PolycodeFrame(editorManager);
+	frame->setAnchorPoint(-1.0, -1.0, 0.0);
 
-	frame->editorManager = editorManager;
 	editorManager->addEventListener(frame, Event::CHANGE_EVENT);
 
 	frame->console->backtraceWindow->addEventListener(this, BackTraceEvent::EVENT_BACKTRACE_SELECTED);
@@ -96,7 +142,6 @@ PolycodeIDEApp::PolycodeIDEApp(PolycodeView *view) : EventDispatcher() {
 
 	frame->yesNoCancelPopup->addEventListener(this, UIEvent::YES_EVENT);
 	frame->yesNoCancelPopup->addEventListener(this, UIEvent::NO_EVENT);
-
 	
 	frame->newProjectWindow->addEventListener(this, UIEvent::OK_EVENT);
 	frame->exportProjectWindow->addEventListener(this, UIEvent::OK_EVENT);
@@ -107,38 +152,34 @@ PolycodeIDEApp::PolycodeIDEApp(PolycodeView *view) : EventDispatcher() {
 	
 	frame->playButton->addEventListener(this, UIEvent::CLICK_EVENT);
 	frame->stopButton->addEventListener(this, UIEvent::CLICK_EVENT);
-
+	
+	frame->addEventListener(this, UIEvent::CLOSE_EVENT);
+	frame->addEventListener(this, Event::CHANGE_EVENT);	
 	screen->addChild(frame);
-
 	
 	projectManager = new PolycodeProjectManager();
-	projectManager->setProjectBrowser(frame->getProjectBrowser());
-	
+	editorManager->setProjectManager(projectManager);
+		
 	frame->projectManager = projectManager;
-
 	projectManager->addEventListener(frame, Event::CHANGE_EVENT);
-	
-	frame->getProjectBrowser()->addEventListener(this, Event::CHANGE_EVENT);
-	frame->getProjectBrowser()->addEventListener(this, PolycodeProjectBrowserEvent::HANDLE_MENU_COMMAND);
-	
-	frame->Resize(core->getXRes(), core->getYRes());	
-
+	projectManager->addEventListener(this, Event::CHANGE_EVENT);
+			
+//	frame->Resize(core->getXRes(), core->getYRes());	
 	
 	debugger = new PolycodeRemoteDebugger(projectManager);
 	frame->console->setDebugger(debugger);
 	
 	editorManager->registerEditorFactory(new PolycodeImageEditorFactory());
 	editorManager->registerEditorFactory(new PolycodeMaterialEditorFactory());	
-	editorManager->registerEditorFactory(new PolycodeScreenEditorFactory());	
 	editorManager->registerEditorFactory(new PolycodeFontEditorFactory());
 	editorManager->registerEditorFactory(new PolycodeTextEditorFactory());
 	editorManager->registerEditorFactory(new PolycodeProjectEditorFactory(projectManager));
 	editorManager->registerEditorFactory(new PolycodeSpriteEditorFactory());
-
-		
+	editorManager->registerEditorFactory(new PolycodeMeshEditorFactory());
+	editorManager->registerEditorFactory(new PolycodeEntityEditorFactory());
+			
 	screen->addChild(globalMenu);	
 				
-	loadConfigFile();
 	frame->console->applyTheme();
 
 #ifdef USE_POLYCODEUI_MENUBAR
@@ -180,20 +221,23 @@ PolycodeIDEApp::PolycodeIDEApp(PolycodeView *view) : EventDispatcher() {
 	menuBar->addEventListener(this, UIEvent::OK_EVENT);
 
 	screen->addChild(menuBar);
-	frame->position.y = 25;
+	frame->setPositionY(25);
 #else
 	menuBar = NULL;
 #endif
-	core->setVideoMode(1100, 700, false, true, 0, 0);
 
 	needsRedraw = false;
 	lastConnected = false;
 	
-	frame->closeFileButton->addEventListener(this, UIEvent::CLICK_EVENT);
-	
 	quittingApp = false;
 	
 	CoreServices::getInstance()->getCore()->getInput()->addEventListener(this, InputEvent::EVENT_KEYDOWN);
+	
+	applyFinalConfig();
+    
+    core->updateAndRender();
+    frame->Resize(core->getXRes(), core->getYRes());
+
 }
 
 void PolycodeIDEApp::renameFile() {
@@ -210,7 +254,24 @@ void PolycodeIDEApp::showAbout() {
 }
 
 void PolycodeIDEApp::showSettings() {
+	frame->settingsWindow->updateUI();
 	frame->showModal(frame->settingsWindow);
+}
+
+void PolycodeIDEApp::createNewTab() {
+	frame->getActiveProjectFrame()->addNewTab();
+}
+
+void PolycodeIDEApp::closeTab() {
+	frame->getActiveProjectFrame()->closeTab(frame->getActiveProjectFrame()->getActiveTab());
+}
+
+void PolycodeIDEApp::showNextTab() {
+	frame->getActiveProjectFrame()->showNextTab();
+}
+
+void PolycodeIDEApp::showPreviousTab() {
+	frame->getActiveProjectFrame()->showPreviousTab();
 }
 
 void PolycodeIDEApp::toggleConsole() {
@@ -218,10 +279,15 @@ void PolycodeIDEApp::toggleConsole() {
 }
 
 void PolycodeIDEApp::doRemoveFile() {
+
+	if(!frame->getActiveProjectFrame()) {
+		return;
+	}
+
 	if(projectManager->selectedFile != "") {
 		core->removeDiskItem(projectManager->selectedFile);
 		if(projectManager->getActiveProject()) {
-			frame->projectBrowser->refreshProject(projectManager->getActiveProject());
+            refreshProject();
 		}
 		PolycodeEditor *editor = 0;
 		for (int i=0; i < editorManager->openEditors.size(); i++) {
@@ -261,7 +327,12 @@ void PolycodeIDEApp::newFile() {
 
 void PolycodeIDEApp::refreshProject() {
 	if(projectManager->getActiveProject()) {
-		frame->getProjectBrowser()->refreshProject(projectManager->getActiveProject());
+        PolycodeProjectBrowser *browser;
+        PolycodeProject *project = projectManager->getActiveProject();
+        for (int i=0; i < frame->getProjectFrame(project)->getNumTabs(); i++) {
+            browser = frame->getProjectFrame(project)->getTabAtIndex(i)->getProjectBrowser();
+            browser->Refresh();
+        }
 	}
 }
 
@@ -270,14 +341,13 @@ void PolycodeIDEApp::removeEditor(PolycodeEditor *editor) {
 	if (!editor)
 		return;
 	
-	frame->removeEditor(editor);
-	editorManager->destroyEditor(editor);
-	if(editorManager->openEditors.size() > 0) {
-		editorManager->setCurrentEditor(editorManager->openEditors[0]);
-		frame->showEditor(editorManager->openEditors[0]);
-	} else {
-		editorManager->setCurrentEditor(NULL);
+	if(editor->getEditorHolder()) {
+		editor->getEditorHolder()->setEditor(NULL);
 	}
+
+	editorManager->destroyEditor(editor);		
+	editorManager->setCurrentEditor(NULL);
+	
 }
 
 void PolycodeIDEApp::closeFile() {
@@ -337,8 +407,13 @@ void PolycodeIDEApp::closeProject() {
 // private helper function that removes editors and project on project close.
 void PolycodeIDEApp::doCloseProject() {
 	doCloseFiles(tempEditorStore);
-	frame->getProjectBrowser()->removeProject(projectManager->getActiveProject());
+
+	frame->removeProjectFrame(projectManager->getActiveProject());
+	
 	projectManager->removeProject(projectManager->getActiveProject());
+	if(projectManager->getProjectCount() > 0) {
+		projectManager->setActiveProject(projectManager->getProjectByIndex(0));
+	}
 }
 
 void PolycodeIDEApp::newGroup() {
@@ -403,6 +478,9 @@ void PolycodeIDEApp::doRunProject() {
 	printf("Running project...\n");
 	stopProject();
 
+    debugger->resetDebugger();
+    frame->console->clearBacktraces();
+    
 	frame->showConsole();
 
 	String outPath = PolycodeToolLauncher::generateTempPath(projectManager->getActiveProject()) + ".polyapp";
@@ -424,11 +502,13 @@ bool PolycodeIDEApp::quitApp() {
 			frame->showModal(frame->yesNoCancelPopup);
 			return false;
 		} else {	
-			frame->removeEditor(editor);
+			if(editor->getEditorHolder()) {
+				editor->getEditorHolder()->setEditor(NULL);
+			}
 			editorManager->destroyEditor(editor);
 			if(editorManager->openEditors.size() > 0) {
 				editorManager->setCurrentEditor(editorManager->openEditors[0]);
-				frame->showEditor(editorManager->openEditors[0]);
+				frame->getActiveProjectFrame()->getActiveTab()->showEditor(editorManager->openEditors[0]);
 			} else{
 				editorManager->setCurrentEditor(NULL);
 			}
@@ -453,6 +533,71 @@ void PolycodeIDEApp::runProject() {
 	}
 }
 
+void PolycodeIDEApp::importAssets() {
+	vector<CoreFileExtension> extensions;		
+	
+	extensions.push_back(CoreFileExtension("Collada", "dae"));
+	extensions.push_back(CoreFileExtension("Collada XML", "xml"));
+	extensions.push_back(CoreFileExtension("Blender", "blend"));
+	extensions.push_back(CoreFileExtension("Biovision BVH", "bvh"));
+	extensions.push_back(CoreFileExtension("3D Studio Max 3DS", "3ds"));
+	extensions.push_back(CoreFileExtension("3D Studio Max ASE", "ase"));
+	extensions.push_back(CoreFileExtension("3Wavefront Object", "obj"));
+	extensions.push_back(CoreFileExtension("Stanford Polygon Library", "ply"));
+	extensions.push_back(CoreFileExtension("AutoCAD DXF", "dxf"));
+	extensions.push_back(CoreFileExtension("IFC-STEP", "ifc"));
+	extensions.push_back(CoreFileExtension("Neutral File Format", "nff"));
+	extensions.push_back(CoreFileExtension("Valve Model", "smd"));
+	extensions.push_back(CoreFileExtension("Valve Model", "vta"));
+	extensions.push_back(CoreFileExtension("Quake I", "mdl"));
+	extensions.push_back(CoreFileExtension("Quake II", "md2"));
+	extensions.push_back(CoreFileExtension("Quake III", "md3"));
+	extensions.push_back(CoreFileExtension("Quake III BSP", "pk3"));
+	extensions.push_back(CoreFileExtension("RtCW", "mdc"));
+	extensions.push_back(CoreFileExtension("Doom 3", "md5mesh"));
+	extensions.push_back(CoreFileExtension("Doom 3 Animation", "md5anim"));
+	extensions.push_back(CoreFileExtension("Direct X", "x"));
+	extensions.push_back(CoreFileExtension("Quick 3D", "q3o"));
+	extensions.push_back(CoreFileExtension("Quick 3D", "q3s"));
+	extensions.push_back(CoreFileExtension("Raw Triangles", "raw"));
+	extensions.push_back(CoreFileExtension("AC3D", "ac"));		
+	extensions.push_back(CoreFileExtension("Stereolithography", "stl"));
+	extensions.push_back(CoreFileExtension("Irrlicht Mesh", "irrmesh"));
+	extensions.push_back(CoreFileExtension("Object File Format", "off"));
+	extensions.push_back(CoreFileExtension("Terragen Terrain", "terr"));
+	extensions.push_back(CoreFileExtension("3D GameStudio Model", "mdl"));
+	extensions.push_back(CoreFileExtension("3D GameStudio Terrain", "hmp"));
+	extensions.push_back(CoreFileExtension("Ogre mesh XML", "mesh.xml"));	
+	extensions.push_back(CoreFileExtension("Ogre skeleton XML", "skeleton.xml"));
+	extensions.push_back(CoreFileExtension("Ogre material", "material"));
+	extensions.push_back(CoreFileExtension("Milkshape 3D", "ms3d"));
+	extensions.push_back(CoreFileExtension("Lightwave model", "lwo"));
+	extensions.push_back(CoreFileExtension("Lightwave scene", "lws"));
+	extensions.push_back(CoreFileExtension("Modo model", "lxo"));
+	extensions.push_back(CoreFileExtension("CharacterStudio Motion", "csm"));
+	extensions.push_back(CoreFileExtension("TrueSpace", "scn"));
+	extensions.push_back(CoreFileExtension("XGL", "xgl"));						
+			
+#ifdef USE_POLYCODEUI_FILE_DIALOGS
+	std::vector<String> exts;
+	for(int i=0; i < extensions.size(); i++) {
+		exts.push_back(extensions[i].extension);
+	}
+
+	frame->showFileBrowser(CoreServices::getInstance()->getCore()->getUserHomeDirectory(),	false, exts, false);
+	frame->fileDialog->addEventListener(this, UIEvent::OK_EVENT);
+	frame->fileDialog->action = "openImportAssets";
+	
+#else
+	std::vector<String> files = core->openFilePicker(extensions, false);	
+	if(files.size()) {		
+		frame->assetImporterWindow->setSourceFileAndTargetFolder(files[0], projectManager->activeFolder, projectManager->activeFolder.replace(projectManager->getActiveProject()->getRootFolder(), ""));
+		frame->showModal(frame->assetImporterWindow);
+		frame->assetImporterWindow->addEventListener(this, UIEvent::OK_EVENT);
+	}
+#endif
+}
+
 void PolycodeIDEApp::addFiles() {
 	if(projectManager->getActiveProject()) {
 #ifdef USE_POLYCODEUI_FILE_DIALOGS
@@ -469,7 +614,7 @@ void PolycodeIDEApp::addFiles() {
 			core->copyDiskItem(files[i], projectManager->activeFolder + "/" + entry.name);
 		}
 		
-		frame->getProjectBrowser()->refreshProject(projectManager->getActiveProject());
+        refreshProject();
 #endif
 	}		
 }
@@ -555,31 +700,51 @@ void PolycodeIDEApp::openFile(OSFileEntry file) {
 		}	
 	}
 
-	PolycodeEditor *editor = editorManager->getEditorForPath(file.fullPath);
+	PolycodeEditor *editor = editorManager->openFile(file);
 	
 	if(editor) {
-		frame->showEditor(editor);
-	} else {
-		editor = editorManager->createEditorForExtension(file.extension);
-		if(editor) {
-			editor->parentProject = projectManager->getActiveProject();
-			if(editor->openFile(file)) {
-				frame->addEditor(editor);
-				frame->showEditor(editor);
-			} else {
-				delete editor;
-				editor = NULL;
-			}
-		}
-	}
-							
-	if(editor) {
+		frame->getActiveProjectFrame()->getActiveTab()->showEditor(editor);
 		editorManager->setCurrentEditor(editor);
 	}
-		
 }
 
 void PolycodeIDEApp::handleEvent(Event *event) {
+
+	if(event->getDispatcher() == frame->assetImporterWindow) {
+        refreshProject();
+	}
+	
+	if(event->getDispatcher() == projectManager && event->getEventCode() == Event::CHANGE_EVENT) {
+		if(projectManager->getActiveProject()) {
+		
+			if(frame->getCurrentProjectBrowser()) {
+				frame->getCurrentProjectBrowser()->removeAllHandlersForListener(this);
+			}
+		
+			PolycodeProjectFrame *projectFame = frame->getProjectFrame(projectManager->getActiveProject());
+			if(projectFame) {
+				frame->switchToProjectFrame(projectFame);
+			} else {
+				frame->createProjectFrame(projectManager->getActiveProject());
+			}	
+			frame->getCurrentProjectBrowser()->addEventListener(this, Event::CHANGE_EVENT);
+			frame->getCurrentProjectBrowser()->addEventListener(this, PolycodeProjectBrowserEvent::HANDLE_MENU_COMMAND);
+		}
+	}
+
+	if(event->getDispatcher() == frame) {
+		if(event->getEventCode() == Event::CHANGE_EVENT) {
+			if(frame->getCurrentProjectBrowser()) {
+				frame->getCurrentProjectBrowser()->removeAllHandlersForListener(this);
+			}
+			frame->getCurrentProjectBrowser()->addEventListener(this, Event::CHANGE_EVENT);
+			frame->getCurrentProjectBrowser()->addEventListener(this, PolycodeProjectBrowserEvent::HANDLE_MENU_COMMAND);			
+		}
+			
+		if(event->getEventCode() == UIEvent::CLOSE_EVENT) {
+			closeFile();
+		}
+	}
 
 	if(event->getDispatcher() == frame->fileDialog) {
 		if(event->getEventCode() == UIEvent::OK_EVENT && event->getEventType() == "UIEvent") {
@@ -593,7 +758,11 @@ void PolycodeIDEApp::handleEvent(Event *event) {
 				} else if(frame->fileDialog->action == "addFiles") {
 					OSFileEntry entry = OSFileEntry(path, OSFileEntry::TYPE_FILE);
 					core->copyDiskItem(path, projectManager->activeFolder + "/" + entry.name);
-					frame->getProjectBrowser()->refreshProject(projectManager->getActiveProject());
+ 			                   refreshProject();
+				} else if(frame->fileDialog->action == "openImportAssets") {
+					frame->assetImporterWindow->setSourceFileAndTargetFolder(path, projectManager->activeFolder, projectManager->activeFolder.replace(projectManager->getActiveProject()->getRootFolder(), ""));
+					frame->showModal(frame->assetImporterWindow);
+					frame->assetImporterWindow->addEventListener(this, UIEvent::OK_EVENT);
 				}
 			}
 		}
@@ -663,7 +832,7 @@ void PolycodeIDEApp::handleEvent(Event *event) {
 				core->setFramerate(3);
 			break;		
 			case Core::EVENT_GAINED_FOCUS:
-				core->setFramerate(90);			
+				core->setFramerate(60);			
 			break;					
 			case Core::EVENT_CORE_RESIZE:
 				if(menuBar) {
@@ -676,7 +845,7 @@ void PolycodeIDEApp::handleEvent(Event *event) {
 		}
 	}
 	
-	if(event->getDispatcher()  == frame->getProjectBrowser()) {
+	if(event->getDispatcher()  == frame->getCurrentProjectBrowser()) {
 		
 		if(event->getEventType() == "PolycodeProjectBrowserEvent") {
 			switch(event->getEventCode()) {
@@ -687,6 +856,8 @@ void PolycodeIDEApp::handleEvent(Event *event) {
 						newFile();
 					} else if(bEvent->command == "add_files") {
 						addFiles();
+					} else if(bEvent->command == "import_assets") {
+						importAssets();		
 					} else if(bEvent->command == "add_new_project") {
 						newProject();
 					} else if(bEvent->command == "add_new_folder") {				
@@ -697,21 +868,20 @@ void PolycodeIDEApp::handleEvent(Event *event) {
 						renameFile();
 					} else if(bEvent->command == "remove") {
 						removeFile();
-					}																				
+					} else if (bEvent->command == "close_project"){
+						closeProject();
+					}
 				break;
 			}
 		}
 		
 		if(event->getEventCode() == Event::CHANGE_EVENT) {
-			PolycodeProjectBrowser *pb = frame->getProjectBrowser();
+			PolycodeProjectBrowser *pb = frame->getCurrentProjectBrowser();
 			BrowserUserData *selectedData = pb->getSelectedData();
 						
-			if(selectedData->type == 3) {
+			if(selectedData->type == 0) {
 				projectManager->activeFolder = selectedData->parentProject->getRootFolder();
 				projectManager->selectedFile = "";				
-			} else if(selectedData->type == 0) {
-				projectManager->activeFolder = "";
-				projectManager->selectedFile = "";
 			} else {
 				projectManager->selectedFileEntry = selectedData->fileEntry;
 				projectManager->selectedFile = selectedData->fileEntry.fullPath;
@@ -721,8 +891,6 @@ void PolycodeIDEApp::handleEvent(Event *event) {
 					projectManager->activeFolder = selectedData->fileEntry.fullPath;
 				}			
 			}
-			
-			projectManager->setActiveProject(selectedData->parentProject);
 			
 			if(selectedData->type == 0)
 				return;			
@@ -756,7 +924,6 @@ void PolycodeIDEApp::handleEvent(Event *event) {
 						editor->saveFile();
 						closeFile();
 					}
-					frame->yesNoCancelPopup->action = "";
 					frame->hideModal();					
 				}
 				break;
@@ -767,7 +934,6 @@ void PolycodeIDEApp::handleEvent(Event *event) {
 						editor->setHasChanges(false);
 						closeFile();
 					}
-					frame->yesNoCancelPopup->action = "";					
 					frame->hideModal();
 				}
 				break;
@@ -782,8 +948,12 @@ void PolycodeIDEApp::handleEvent(Event *event) {
 					if(editor) {
 						editor->saveFile();
 						closeFile();
+						if(editorManager->openEditors.size() > 0) {
+							editorManager->setCurrentEditor(editorManager->openEditors[0]);
+						} else{
+							editorManager->setCurrentEditor(NULL);
+						}						
 					}
-					frame->yesNoCancelPopup->action = "";
 					frame->hideModal();
 					if(quitApp()) {
 						core->Shutdown();
@@ -796,8 +966,12 @@ void PolycodeIDEApp::handleEvent(Event *event) {
 					if(editor) {
 						editor->setHasChanges(false);
 						closeFile();
+						if(editorManager->openEditors.size() > 0) {
+							editorManager->setCurrentEditor(editorManager->openEditors[0]);
+						} else{
+							editorManager->setCurrentEditor(NULL);
+						}						
 					}
-					frame->yesNoCancelPopup->action = "";					
 					frame->hideModal();
 					if(quitApp()) {
 						core->Shutdown();
@@ -820,7 +994,6 @@ void PolycodeIDEApp::handleEvent(Event *event) {
 				case UIEvent::CANCEL_EVENT:
 					break;
 			}
-			frame->yesNoCancelPopup->action = "";
 			frame->hideModal();
 		}
 		
@@ -836,7 +1009,6 @@ void PolycodeIDEApp::handleEvent(Event *event) {
 				case UIEvent::CANCEL_EVENT:
 					break;
 			}
-			frame->yesNoCancelPopup->action = "";
 			frame->hideModal();
 		}
 	} else if(event->getDispatcher() == frame->yesNoPopup) {
@@ -846,7 +1018,6 @@ void PolycodeIDEApp::handleEvent(Event *event) {
 			}
 			
 			frame->hideModal();
-			frame->yesNoPopup->action = "";		
 		}
 	
 		if(event->getEventType() == "UIEvent" && event->getEventCode() == UIEvent::OK_EVENT) {
@@ -860,7 +1031,6 @@ void PolycodeIDEApp::handleEvent(Event *event) {
 			}
 			
 			frame->hideModal();
-			frame->yesNoPopup->action = "";
 		}
 	}
 	
@@ -870,14 +1040,14 @@ void PolycodeIDEApp::handleEvent(Event *event) {
 			if(frame->textInputPopup->action == "newGroup") {	
 				core->createFolder(projectManager->activeFolder+"/"+frame->textInputPopup->getValue());
 				if(projectManager->getActiveProject()) {
-					frame->getProjectBrowser()->refreshProject(projectManager->getActiveProject());
+                    refreshProject();
 				}			
 			}
 			
 			if(frame->textInputPopup->action == "renameFile") {		
 				core->moveDiskItem(projectManager->selectedFileEntry.fullPath, projectManager->selectedFileEntry.basePath + "/" + frame->textInputPopup->getValue());			
 				if(projectManager->getActiveProject()) {
-					frame->getProjectBrowser()->refreshProject(projectManager->getActiveProject());
+                    refreshProject();
 				}
 				
 				PolycodeEditor *editor = editorManager->getEditorForPath(projectManager->selectedFileEntry.fullPath);
@@ -901,11 +1071,15 @@ void PolycodeIDEApp::handleEvent(Event *event) {
 			if(event->getEventCode() == UIEvent::OK_EVENT) {
 				config->setStringValue("Polycode", "useExternalTextEditor", settingsWindow->useExternalTextEditorBox->isChecked() ? "true" : "false");
 				config->setStringValue("Polycode", "externalTextEditorCommand", settingsWindow->externalTextEditorCommand->getText());
+				config->setStringValue("Polycode", "uiTheme", settingsWindow->uiThemeBox->getSelectedItem()->label);
+				
+				if(settingsWindow->textureFilteringBox->getSelectedIndex() == 0) {
+					config->setStringValue("Polycode", "textureFilteringMode", "linear");
+				} else {
+					config->setStringValue("Polycode", "textureFilteringMode", "nearest");				
+				}
 			
 				frame->hideModal();
-			}
-			if(event->getEventCode() == UIEvent::CLOSE_EVENT) {
-				settingsWindow->updateUI();
 			}
 		}
 	}
@@ -928,10 +1102,9 @@ void PolycodeIDEApp::handleEvent(Event *event) {
 	if(event->getDispatcher() == frame->newFileWindow) {
 		if(event->getEventType() == "UIEvent" && event->getEventCode() == UIEvent::OK_EVENT) {
 			projectManager->createNewFile(frame->newFileWindow->getTemplatePath(), frame->newFileWindow->getFileName());
-			frame->hideModal();			
-			
+			frame->hideModal();						
 			if(projectManager->getActiveProject()) {
-				frame->projectBrowser->refreshProject(projectManager->getActiveProject());
+                refreshProject();
 			}			
 		}
 	}
@@ -947,6 +1120,7 @@ void PolycodeIDEApp::handleEvent(Event *event) {
 	}
 	
 	// close files and editors after the close file button is pressed
+	/*
 	if (event->getDispatcher() == frame->closeFileButton) {
 		if (event->getEventCode() == UIEvent::CLICK_EVENT) {
 			if (core->getInput()->getKeyState(KEY_RSHIFT) || core->getInput()->getKeyState(KEY_LSHIFT))
@@ -955,15 +1129,18 @@ void PolycodeIDEApp::handleEvent(Event *event) {
 				closeFile();
 		}
 	}
+	*/
 	
 	// open an editor/file if project browser has focus and user hits enter or right-arrow key
 	if (event->getDispatcher() == CoreServices::getInstance()->getCore()->getInput()) {
-		if (event->getEventCode() == InputEvent::EVENT_KEYDOWN && frame->getProjectBrowser()->treeContainer->hasFocus) {
-			InputEvent *inEvent = (InputEvent*)event;
-			if (inEvent->keyCode() == KEY_RETURN || inEvent->keyCode() == KEY_RIGHT) {
-				BrowserUserData *selectedData = frame->getProjectBrowser()->getSelectedData();
-				if (selectedData)
-					openFile(selectedData->fileEntry);
+		if(frame->getActiveProjectFrame()) {
+			if (event->getEventCode() == InputEvent::EVENT_KEYDOWN && frame->getCurrentProjectBrowser()->treeContainer->hasFocus) {
+				InputEvent *inEvent = (InputEvent*)event;
+				if (inEvent->keyCode() == KEY_RETURN || inEvent->keyCode() == KEY_RIGHT) {
+					BrowserUserData *selectedData = frame->getCurrentProjectBrowser()->getSelectedData();
+					if (selectedData)
+						openFile(selectedData->fileEntry);
+				}
 			}
 		}
 	}
@@ -975,11 +1152,29 @@ void PolycodeIDEApp::saveConfigFile() {
 	configFile.root.name = "config";
 	configFile.root.addChild("open_projects");
 	configFile.root.addChild("syntax_theme", globalSyntaxTheme->name);
+	configFile.root.addChild("ui_theme", config->getStringValue("Polycode", "uiTheme"));
+	configFile.root.addChild("texture_filtering_mode", config->getStringValue("Polycode", "textureFilteringMode"));
+	
+	configFile.root.addChild("app_width", String::IntToString(core->getXRes()));
+	configFile.root.addChild("app_height", String::IntToString(core->getYRes()));
+	
+	ObjectEntry *consoleEntry = configFile.root.addChild("console");
+	consoleEntry->addChild("size", frame->getConsoleSize());
+	consoleEntry->addChild("showing", frame->isShowingConsole());
+	
 	for(int i=0; i < projectManager->getProjectCount(); i++) {
 		PolycodeProject *project = projectManager->getProjectByIndex(i);		
 		ObjectEntry *projectEntry = configFile.root["open_projects"]->addChild("project");
+
+		projectEntry->addChild("is_active", (project == projectManager->getActiveProject()));
+		
 		projectEntry->addChild("name", project->getProjectName());
 		projectEntry->addChild("path", project->getProjectFile());
+		
+		ObjectEntry *projectFrameConfig = frame->getFrameConfigForProject(project);
+		if(projectFrameConfig) {
+			projectEntry->addChild(projectFrameConfig);
+		}
 	}
 
 	configFile.root.addChild("settings");
@@ -998,38 +1193,52 @@ void PolycodeIDEApp::saveConfigFile() {
 }
 
 void PolycodeIDEApp::loadConfigFile() {
-	Object configFile;
 	// TODO: Make a crossplatform core method to get application data path
 #if defined(__APPLE__) && defined(__MACH__)
 	configFile.loadFromXML(core->getUserHomeDirectory()+"/Library/Application Support/Polycode/config.xml");
 #else
 	configFile.loadFromXML(core->getUserHomeDirectory()+"/.polycode/config.xml");
 #endif	
+
+	Config *config = CoreServices::getInstance()->getConfig();
+
 	globalSyntaxTheme = new SyntaxHighlightTheme();
-	String themeName = "monokai";
+	
+	String uiThemeName = "dark";
+	
+	CoreServices::getInstance()->getRenderer()->setTextureFilteringMode(Renderer::TEX_FILTERING_LINEAR);
+	
+	ObjectEntry *texture_filtering_mode = configFile.root["texture_filtering_mode"];
+	config->setStringValue("Polycode", "textureFilteringMode", "linear");	
+	
+	if(texture_filtering_mode) {
+		if(texture_filtering_mode->stringVal == "nearest") {
+		config->setStringValue("Polycode", "textureFilteringMode", "nearest");		
+			CoreServices::getInstance()->getRenderer()->setTextureFilteringMode(Renderer::TEX_FILTERING_NEAREST);
+		}
+	}
+	
+	ObjectEntry *uiTheme = configFile.root["ui_theme"];
+	if(uiTheme) {
+		uiThemeName = uiTheme->stringVal;
+	}	
+	config->setStringValue("Polycode", "uiTheme", uiThemeName);
+	
+	String themeName = "default";
 	ObjectEntry *syntaxTheme = configFile.root["syntax_theme"];
 	if(syntaxTheme) {
 		themeName = syntaxTheme->stringVal;
 	}
 	globalSyntaxTheme->loadFromFile(themeName);
-	
+
 	if(configFile.root["open_projects"]) {
 		ObjectEntry *projects = configFile.root["open_projects"];
 		if(projects) {
 			for(int i=0; i < projects->length; i++) {
-				ObjectEntry *entry = (*(*projects)[i])["path"];
-				if(entry) {
-					PolycodeProject* project = projectManager->openProject(entry->stringVal);
-					if(project) {
-						OSFileEntry projectEntry =	OSFileEntry(project->getProjectFile(), OSFileEntry::TYPE_FILE);
-						projectManager->setActiveProject(project);
-					}
-				}
+				projectsToOpen.push_back((*projects)[i]);
 			}
 		}
 	}
-	
-	Config *config = CoreServices::getInstance()->getConfig();
 
 	if(configFile.root["settings"]) {
 		ObjectEntry *settings = configFile.root["settings"];
@@ -1051,20 +1260,114 @@ void PolycodeIDEApp::loadConfigFile() {
 		config->setStringValue("Polycode","useExternalTextEditor", "false");
 		config->setStringValue("Polycode", "externalTextEditorCommand", "");
 	}
-	frame->settingsWindow->updateUI();
 }
 
+void PolycodeIDEApp::applyFinalConfig() {
 
-PolycodeIDEApp::~PolycodeIDEApp() {
+	ObjectEntry *appWidth = configFile.root["app_width"];
+	ObjectEntry *appHeight = configFile.root["app_height"];
+		
+	bool setResFromConfig = false;
+	if(appWidth && appHeight) {
+		int newXRes = appWidth->intVal;
+		int newYRes = appHeight->intVal;		
+		if(newXRes > 100 && newYRes > 100) {
+			setResFromConfig = true;
+			core->setVideoMode(newXRes, newYRes, false, true, 0, 0);
+			frame->Resize(newXRes, newYRes);
+		}
+	}
 	
+	if(!setResFromConfig) {
+		core->setVideoMode(1100, 700, false, true, 0, 0);
+		frame->Resize(1100, 700);			
+	}
+
+
+	ObjectEntry *consoleEntry = configFile.root["console"];	
+	if(consoleEntry) {
+		if((*consoleEntry)["size"]) {
+			frame->getConsoleSizer()->setMainHeight((*consoleEntry)["size"]->NumberVal);
+		}
+		if((*consoleEntry)["showing"]) {
+			if((*consoleEntry)["showing"]->boolVal) {
+				frame->showConsole();
+			} else {
+				frame->hideConsole();			
+			}
+		}		
+	}
+
+	PolycodeProject *activeConfigProject = NULL;
+	
+	for(int i=0; i < projectsToOpen.size(); i++) {
+		ObjectEntry *projectPathEntry = ((*projectsToOpen[i])["path"]);		
+		if(projectPathEntry) {
+			String projectPath = projectPathEntry->stringVal;
+			PolycodeProject* project = projectManager->openProject(projectPath);
+			
+			ObjectEntry *projectActiveEntry = ((*projectsToOpen[i])["is_active"]);
+			if(projectActiveEntry) {
+				if(projectActiveEntry->boolVal) {
+					activeConfigProject = project;
+				}
+			}
+			
+			PolycodeProjectFrame *projectFrame = frame->getProjectFrame(project);
+			
+			PolycodeProjectTab *activeTab = NULL;
+			
+			if(project) {
+				OSFileEntry projectEntry =	OSFileEntry(project->getProjectFile(), OSFileEntry::TYPE_FILE);	
+				ObjectEntry *frameEntry = ((*projectsToOpen[i])["frame"]);
+				if(frameEntry) {
+					ObjectEntry *tabs = (*frameEntry)["tabs"];
+					if(tabs) {
+						for(int i=0; i < tabs->length; i++) {
+							ObjectEntry *tab = (*tabs)[i];
+							if(tab) {
+								ObjectEntry *tabName = (*tab)["tab_name"];
+								ObjectEntry *tabActive = (*tab)["tab_active"];
+								
+								if(i == 0) {
+									projectFrame->getTabAtIndex(0)->setTabName(tabName->stringVal);
+									projectFrame->restructTabs();
+								} else {
+									projectFrame->addNewTab(tabName->stringVal);
+								}			
+													
+								projectFrame->getTabAtIndex(i)->applyTabConfig(tab);
+								
+								if(tabActive->boolVal) {
+									activeTab = projectFrame->getTabAtIndex(i);
+								}
+								
+							}
+						}
+						
+						if(activeTab) {
+							projectFrame->showTab(activeTab);
+						}
+					}
+				}
+			}
+		}				
+	}
+	
+	if(activeConfigProject) {
+		projectManager->setActiveProject(activeConfigProject);
+		frame->switchToProjectFrame(frame->getProjectFrame(activeConfigProject));
+	}
+
+}
+
+PolycodeIDEApp::~PolycodeIDEApp() {	
 	saveConfigFile();
-	
 	delete core;
 }
 
 bool PolycodeIDEApp::Update() {
 
-	bool retVal = core->Update();
 
 	if(willRunProject) {
 		willRunProject = false;
@@ -1103,16 +1406,14 @@ bool PolycodeIDEApp::Update() {
 	
 	if(projectManager->getProjectCount() > 0) {
 		frame->welcomeEntity->enabled =  false;
-		frame->projectBrowser->enabled =  true;		
-		frame->mainSizer->enabled = true;
+		
+		frame->getConsoleSizer()->enabled = true;
 	} else {
 		frame->welcomeEntity->enabled =  true;
-		frame->projectBrowser->enabled =  false;			
-		frame->mainSizer->enabled = false;		
+		frame->getConsoleSizer()->enabled = false;		
 	}
 
 
-	core->Render();
-	return retVal;
+	return core->updateAndRender();
 }
 

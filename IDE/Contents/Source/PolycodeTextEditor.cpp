@@ -371,7 +371,7 @@ std::vector<SyntaxHighlightToken> PolycodeSyntaxHighlighter::parseLua(String tex
 				tokens.push_back(SyntaxHighlightToken(line, type));
 			tokens.push_back(SyntaxHighlightToken(ch, ch_type));
 
-			if(ch == '-' && lastSeparator == '-' && mode != MODE_STRING) {
+			if(ch == '-' && lastSeparator == '-' && text[i-1] == lastSeparator && mode != MODE_STRING) {
 				isComment = true;
 				tokens[tokens.size()-1].type = MODE_COMMENT;
 				tokens[tokens.size()-2].type = MODE_COMMENT;				
@@ -454,7 +454,9 @@ PolycodeTextEditor::PolycodeTextEditor() : PolycodeEditor(true){
 }
 
 PolycodeTextEditor::~PolycodeTextEditor() {
+    textInput->setOwnsChildrenRecursive(true);
 	delete textInput;
+    findBar->setOwnsChildrenRecursive(true);
 	delete findBar;
 	if(syntaxHighligher)
 		delete syntaxHighligher;
@@ -508,6 +510,21 @@ bool PolycodeTextEditor::openFile(OSFileEntry filePath) {
 	
 	isLoading = false;	
 	return true;
+}
+
+ObjectEntry *PolycodeTextEditor::getEditorConfig() {
+	ObjectEntry *configEntry = new ObjectEntry();
+		
+	configEntry->addChild("scroll_offset", textInput->getScrollContainer()->getVScrollBar()->getScrollValue());
+			
+	return configEntry;
+}
+
+void PolycodeTextEditor::applyEditorConfig(ObjectEntry *configEntry) {
+	ObjectEntry *scrollEntry = (*configEntry)["scroll_offset"];
+	if(scrollEntry) {
+		textInput->getScrollContainer()->setScrollValue(0.0, scrollEntry->NumberVal);
+	}
 }
 
 void PolycodeTextEditor::handleEvent(Event *event) {
@@ -595,7 +612,10 @@ void PolycodeTextEditor::showFindBar() {
 	for(int i=0; i < functionMatches.size(); i++) {
 		FindMatch *match = new FindMatch();
 		(*match) = functionMatches[i];
-		findBar->functionList->addComboItem(textInput->getLineText(functionMatches[i].lineNumber).replace("function ", ""), (void*) match);
+        String lineText = textInput->getLineText(functionMatches[i].lineNumber);
+        if (lineText.substr(0,8) == "function") {
+            findBar->functionList->addComboItem(lineText.replace("function ", ""), (void*) match);
+        }
 	}
 	
 	Resize(editorSize.x, editorSize.y);
@@ -640,18 +660,18 @@ void PolycodeTextEditor::Resize(int x, int y) {
 }
 
 FindBar::FindBar() : UIElement() {
-	barBg = new ScreenShape(ScreenShape::SHAPE_RECT, 30,30);
-	barBg->setPositionMode(ScreenEntity::POSITION_TOPLEFT);
+	barBg = new UIRect(30,30);
+	barBg->setAnchorPoint(-1.0, -1.0, 0.0);
 	barBg->color.setColorHexFromString(CoreServices::getInstance()->getConfig()->getStringValue("Polycode", "uiHeaderBgColor"));
 	addChild(barBg);
-	this->height = 30;
+	setHeight(30);
 	
-	ScreenLabel *findLabel = new ScreenLabel("FIND", 18, "section");
+	UILabel *findLabel = new UILabel("FIND", 18, "section");
 	addChild(findLabel);
 	findLabel->setColor(1.0, 1.0, 1.0, 0.6);
 	findLabel->setPosition(10,3);
 
-	ScreenLabel *replaceLabel = new ScreenLabel("REPLACE", 18, "section");
+	UILabel *replaceLabel = new UILabel("REPLACE", 18, "section");
 	addChild(replaceLabel);
 	replaceLabel->setColor(1.0, 1.0, 1.0, 0.6);
 	replaceLabel->setPosition(200,3);
@@ -670,15 +690,15 @@ FindBar::FindBar() : UIElement() {
 	addChild(replaceAllButton);
 	replaceAllButton->setPosition(420, 3);
 
-	ScreenImage *functionIcon = new ScreenImage("Images/function_icon.png");
+	UIImage *functionIcon = new UIImage("main/function_icon.png", 11, 17);
 	addChild(functionIcon);
-	functionIcon->setPosition(540, 5);	
+	functionIcon->setPosition(540, 6);
 	
 	functionList = new UIComboBox(globalMenu, 200);
 	addChild(functionList);
 	functionList->setPosition(560, 4);	
 		
-	closeButton = new UIImageButton("Images/barClose.png");
+	closeButton = new UIImageButton("main/barClose.png", 1.0, 17, 17);
 	addChild(closeButton);
 }
 
@@ -693,15 +713,11 @@ void FindBar::onKeyDown(PolyKEY key, wchar_t charCode) {
 }
 
 FindBar::~FindBar(){
-	delete findInput;
-	delete replaceInput;
-	delete closeButton;
-	delete replaceAllButton;
-	delete barBg;
+
 }
 
 void FindBar::setBarWidth(int width) {
-	barBg->setShapeSize(width, 30);
-	closeButton->setPosition(width - 30, 5);
-	functionList->Resize(width-560-60, functionList->getHeight());
+	barBg->Resize(width, 30);
+	closeButton->setPosition(width - 30, 6);
+	functionList->Resize(width-560-40, functionList->getHeight());
 }

@@ -25,10 +25,12 @@
 
 UIColorPicker *globalColorPicker;
 PolycodeFrame *globalFrame;
-
 extern UIGlobalMenu *globalMenu;
+EditorHolder *activeEditorHolder = NULL;
+extern PolycodeEditorManager *globalEditorManager;
 
-EditPoint::EditPoint(BezierPoint *point, unsigned int type) : ScreenEntity() {
+
+EditPoint::EditPoint(BezierPoint *point, unsigned int type) : Entity() {
 	this->point = point;
 	this->type = type;
 	processInputEvents = true;
@@ -36,8 +38,9 @@ EditPoint::EditPoint(BezierPoint *point, unsigned int type) : ScreenEntity() {
 	draggingPoint = NULL;
 	dragging = false;
 
-	controlHandle1 = new ScreenImage("Images/bezier_handle.png");
-	controlHandle1->setPositionMode(ScreenEntity::POSITION_CENTER);
+	controlHandle1 = new UIRect(5, 5);
+    controlHandle1->setColor(0.0, 1.0, 0.3, 1.0);
+	controlHandle1->setAnchorPoint(0.0, 0.0, 0.0);
 	
 	controlHandle1->addEventListener(this, InputEvent::EVENT_MOUSEDOWN);
 	controlHandle1->addEventListener(this, InputEvent::EVENT_MOUSEUP);
@@ -48,8 +51,9 @@ EditPoint::EditPoint(BezierPoint *point, unsigned int type) : ScreenEntity() {
 		
 	addChild(controlHandle1);
 	
-	controlHandle2 = new ScreenImage("Images/bezier_handle.png");
-	controlHandle2->setPositionMode(ScreenEntity::POSITION_CENTER);
+	controlHandle2 = new UIRect(5, 5);
+    controlHandle2->setColor(0.0, 1.0, 0.3, 1.0);
+	controlHandle2->setAnchorPoint(0.0, 0.0, 0.0);
 	controlHandle2->processInputEvents = true;
 	
 	controlHandle2->addEventListener(this, InputEvent::EVENT_MOUSEDOWN);
@@ -60,13 +64,13 @@ EditPoint::EditPoint(BezierPoint *point, unsigned int type) : ScreenEntity() {
 	
 	addChild(controlHandle2);
 	
-	
-	pointHandle = new ScreenImage("Images/bezier_point.png");
+	pointHandle = new UIRect(8, 8);
+    pointHandle->setColor(1.0, 0.5, 0.2, 1.0);
 	pointHandle->processInputEvents = true;
 	pointHandle->addEventListener(this, InputEvent::EVENT_MOUSEDOWN);
 	pointHandle->addEventListener(this, InputEvent::EVENT_MOUSEUP);
 	pointHandle->addEventListener(this, InputEvent::EVENT_MOUSEUP_OUTSIDE);	
-	pointHandle->setPositionMode(ScreenEntity::POSITION_CENTER);
+	pointHandle->setAnchorPoint(0.0, 0.0, 0.0);
 	pointHandle->setWidth(30);
 	pointHandle->setHeight(30);
 
@@ -76,9 +80,9 @@ EditPoint::EditPoint(BezierPoint *point, unsigned int type) : ScreenEntity() {
 		controlHandle1->enabled = false;		
 		connectorLine1 = NULL;
 	} else {
-		connectorLine1 = new ScreenLine(pointHandle, controlHandle1);
+		connectorLine1 = new SceneLine(pointHandle, controlHandle1);
 		addChild(connectorLine1);
-		connectorLine1->setColorInt(39, 212, 255, 128);
+		connectorLine1->setColorInt(39, 212, 255, 100);
 		connectorLine1->setLineWidth(2.0);
 		connectorLine1->lineSmooth = true;
 	}
@@ -89,9 +93,9 @@ EditPoint::EditPoint(BezierPoint *point, unsigned int type) : ScreenEntity() {
 		controlHandle2->enabled = false;		
 		connectorLine2 = NULL;
 	} else {
-		connectorLine2 = new ScreenLine(pointHandle, controlHandle2);
+		connectorLine2 = new SceneLine(pointHandle, controlHandle2);
 		addChild(connectorLine2);
-		connectorLine2->setColorInt(39, 212, 255, 128);
+		connectorLine2->setColorInt(39, 212, 255, 100);
 		connectorLine2->setLineWidth(2.0);
 		connectorLine2->lineSmooth = true;
 	}	
@@ -109,14 +113,14 @@ void EditPoint::setMode(unsigned int mode) {
 
 void EditPoint::updateCurvePoint() {
 
-	point->p1.x = controlHandle1->getPosition2D().x/610;
-	point->p1.y = controlHandle1->getPosition2D().y/-254;	
+	point->p1.x = controlHandle1->getPosition2D().x/300;
+	point->p1.y = controlHandle1->getPosition2D().y/-100;
 
-	point->p2.x = pointHandle->getPosition2D().x/610;
-	point->p2.y = pointHandle->getPosition2D().y/-254;		
+	point->p2.x = pointHandle->getPosition2D().x/300;
+	point->p2.y = pointHandle->getPosition2D().y/-100;		
 	
-	point->p3.x = controlHandle2->getPosition2D().x/610;
-	point->p3.y = controlHandle2->getPosition2D().y/-254;	
+	point->p3.x = controlHandle2->getPosition2D().x/300;
+	point->p3.y = controlHandle2->getPosition2D().y/-100;	
 
 }
 
@@ -161,7 +165,7 @@ void EditPoint::handleEvent(Event *event) {
 		switch(event->getEventCode()) {
 			case InputEvent::EVENT_MOUSEDOWN:
 				if(mode == CurveEditor::MODE_SELECT) {
-					draggingPoint = (ScreenImage*)event->getDispatcher();
+					draggingPoint = (UIImage*)event->getDispatcher();
 					dragging = true;
 					basePosition = CoreServices::getInstance()->getCore()->getInput()->getMousePosition(); 
 					basePointPosition = draggingPoint->getPosition2D();
@@ -186,23 +190,23 @@ void EditPoint::handleEvent(Event *event) {
 	}
 }
 
-void EditPoint::limitPoint(ScreenImage *point) {
-		if(point->position.x < 0.0)
-			point->position.x = 0.0;
-		if(point->position.x > 610.0)
-			point->position.x = 610.0;
+void EditPoint::limitPoint(UIRect *point) {
+		if(point->getPosition().x < 0.0)
+			point->setPositionX(0.0);
+		if(point->getPosition().x > 300.0)
+			point->setPositionX(300.0);
 
-		if(point->position.y > 0.0)
-			point->position.y = 0.0;
-		if(point->position.y < -254.0)
-			point->position.y = -254.0;
+		if(point->getPosition().y > 0.0)
+			point->setPositionY(0.0);
+		if(point->getPosition().y < -100.0)
+			point->setPositionY(-100.0);
 
 }
 
 void EditPoint::updatePosition() {
-	pointHandle->setPosition(610.0*point->p2.x, -254*point->p2.y, 0.0);	
-	controlHandle1->setPosition(610.0*point->p1.x, -254*point->p1.y, 0.0);	
-	controlHandle2->setPosition(610.0*point->p3.x, -254*point->p3.y, 0.0);	
+	pointHandle->setPosition(300.0*point->p2.x, -100*point->p2.y, 0.0);	
+	controlHandle1->setPosition(300.0*point->p1.x, -100*point->p1.y, 0.0);	
+	controlHandle2->setPosition(300.0*point->p3.x, -100*point->p3.y, 0.0);	
 }
 
 EditPoint::~EditPoint() {
@@ -213,20 +217,17 @@ EditCurve::EditCurve(BezierCurve *targetCurve, Color curveColor) : UIElement() {
 	
 	this->targetCurve = targetCurve;
 	
-	poly = new Polycode::Polygon();
+	visMesh = new SceneMesh(Mesh::LINE_STRIP_MESH);
 	
 	for(int i=0; i < CURVE_SIZE; i++) {		
-		poly->addVertex(0.0, 0.0, 0.0);
+		visMesh->getMesh()->addVertex(0.0, 0.0, 0.0);
 	}
-	
-	visMesh = new ScreenMesh(Mesh::LINE_STRIP_MESH);
-	visMesh->getMesh()->addPolygon(poly);
 	
 	visMesh->lineSmooth = true;
 	visMesh->lineWidth = 2.0;
 
 	addChild(visMesh);
-	visMesh->setPosition(0, 254);	
+	visMesh->setPosition(0, 100);	
 	visMesh->color = curveColor;
 	
 	pointsBase = new UIElement();
@@ -263,7 +264,7 @@ void EditCurve::updatePoints() {
 		point->addEventListener(this, Event::CANCEL_EVENT);		
 		pointsBase->addChild(point);
 		points.push_back(point);
-		point->setPosition(0, 254);			
+		point->setPosition(0, 100);			
 	}
 }
 
@@ -277,13 +278,13 @@ void EditCurve::setMode(unsigned int mode) {
 void EditCurve::Activate() {
 	pointsBase->visible = true;
 	pointsBase->enabled = true;
-	visMesh->color.a = 0.7;	
+	visMesh->color.a = 1.0;	
 }
 
 void EditCurve::Deactivate() {
 	pointsBase->visible = false;
 	pointsBase->enabled = false;
-	visMesh->color.a = 0.4;	
+	visMesh->color.a = 1.0;	
 }
 
 void EditCurve::Update() {
@@ -312,61 +313,62 @@ void EditCurve::handleEvent(Event *event) {
 
 void EditCurve::updateCurve() {
 	targetCurve->recalculateDistances();
-	targetCurve->rebuildBuffers();
 	
-	Number interval = 610.0/CURVE_SIZE;
+	Number interval = 300.0/CURVE_SIZE;
 	Number normInterval = 1.0/CURVE_SIZE;
 	
 	interval += interval/CURVE_SIZE;
 	normInterval += normInterval/CURVE_SIZE;
-		
-	for(int i=0; i < CURVE_SIZE; i++) {
-		poly->getVertex(i)->set(targetCurve->getPointAt(normInterval * i).x * 610, targetCurve->getPointAt(normInterval * i).y * -254.0, 0.0);
+
+    visMesh->getMesh()->vertexPositionArray.data.clear();
+    
+	for(int i=0; i < CURVE_SIZE; i++) {        
+        visMesh->getMesh()->addVertex(targetCurve->getPointAt(normInterval * i).x * 300, targetCurve->getPointAt(normInterval * i).y * 100.0, 0.0);
 	}
 	
-	visMesh->getMesh()->arrayDirtyMap[RenderDataArray::VERTEX_DATA_ARRAY] = true;
+    visMesh->setBlendingMode(Renderer::BLEND_MODE_NORMAL);
 }
 
 EditCurve::~EditCurve() {
 
 }
 
-CurveEditor::CurveEditor() : UIWindow("", 750, 300) {
+CurveEditor::CurveEditor() : UIWindow("", 440, 160) {
 	
 	closeOnEscape = true;
 		
-	bg = new ScreenImage("Images/curve_editor_bg.png");
+	bg = new UIRect(300, 100);
+    bg->setColor(0.1, 0.1, 0.1, 1.0);
 	addChild(bg);
 	bg->setPosition(160, 63);
 	bg->processInputEvents = true;
 	bg->addEventListener(this, InputEvent::EVENT_MOUSEDOWN);
 	
-	selectorImage = new ScreenImage("Images/ScreenEditor/selector.png");
-	selectorImage->setColor(0.0, 0.0, 0.0, 0.3);
+	selectorImage = new UIImage("main/selector.png", 24, 24);
 	addChild(selectorImage);
 		
-	selectButton = new UIImageButton("Images/ScreenEditor/arrow.png");
+	selectButton = new UIImageButton("main/arrow.png", 1.0, 24, 24);
 	addChild(selectButton);
 	selectButton->addEventListener(this, UIEvent::CLICK_EVENT);
 	selectButton->setPosition(170, 33);
 
-	addButton = new UIImageButton("Images/arrow_add.png");
+	addButton = new UIImageButton("main/arrow_add.png", 1.0, 24, 24);
 	addChild(addButton);
 	addButton->addEventListener(this, UIEvent::CLICK_EVENT);	
 	addButton->setPosition(170 + 32, 33);
 
-	removeButton = new UIImageButton("Images/arrow_remove.png");
+	removeButton = new UIImageButton("main/arrow_remove.png", 1.0, 24, 24);
 	addChild(removeButton);
 	removeButton->addEventListener(this, UIEvent::CLICK_EVENT);		
 	removeButton->setPosition(170 + 64, 33);
 	
-	selectorImage->setPosition(selectButton->getPosition().x - 4, selectButton->getPosition().y - 4);
+	selectorImage->setPosition(selectButton->getPosition().x, selectButton->getPosition().y);
 
 	selectedCurve = NULL;
 
 	setMode(0);
 	
-	treeContainer = new UITreeContainer("boxIcon.png", L"Curves", 145, 280);
+	treeContainer = new UITreeContainer("boxIcon.png", L"Curves", 145, 135);
 	treeContainer->getRootNode()->toggleCollapsed();
 	treeContainer->getRootNode()->addEventListener(this, UITreeEvent::SELECTED_EVENT);
 	treeContainer->setPosition(12, 33);
@@ -397,7 +399,7 @@ void CurveEditor::clearCurves() {
 
 void CurveEditor::addCurve(String name, BezierCurve *curve, Color curveColor) {
 
-	UITree *newNode = treeContainer->getRootNode()->addTreeChild("Images/curve_icon.png", name);
+	UITree *newNode = treeContainer->getRootNode()->addTreeChild("main/curve_icon.png", name);
 	EditCurve *editCurve = new EditCurve(curve, curveColor);
 	addChild(editCurve);
 	editCurve->setPosition(160, 63);	
@@ -422,8 +424,8 @@ void CurveEditor::handleEvent(Event *event) {
 				InputEvent *inputEvent = (InputEvent*)event;
 				if(selectedCurve) {
 					Vector2 pos = inputEvent->mousePosition;
-					pos.x = pos.x/610.0;
-					pos.y = 1.0-(pos.y/254.0);
+					pos.x = pos.x/300.0;
+					pos.y = 1.0-(pos.y/100.0);
 					
 					BezierCurve *targetCurve = selectedCurve->targetCurve;
 				
@@ -444,17 +446,17 @@ void CurveEditor::handleEvent(Event *event) {
 	}
 	
 	if(event->getDispatcher() == selectButton) {
-		selectorImage->setPosition(selectButton->getPosition().x - 4, selectButton->getPosition().y - 4);
+		selectorImage->setPosition(selectButton->getPosition().x, selectButton->getPosition().y);
 		setMode(0);
 	}
 
 	if(event->getDispatcher() == addButton) {
-		selectorImage->setPosition(addButton->getPosition().x - 4, addButton->getPosition().y - 4);
+		selectorImage->setPosition(addButton->getPosition().x, addButton->getPosition().y );
 		setMode(1);
 	}
 
 	if(event->getDispatcher() == removeButton) {
-		selectorImage->setPosition(removeButton->getPosition().x - 4, removeButton->getPosition().y - 4);
+		selectorImage->setPosition(removeButton->getPosition().x, removeButton->getPosition().y);
 		setMode(2);
 	}
 	
@@ -468,6 +470,7 @@ void CurveEditor::handleEvent(Event *event) {
 			if(curve) {
 				curve->Activate();
 				curve->setMode(mode);
+                curve->getParentEntity()->moveChildTop(curve);
 			}
 		}
 	}	
@@ -479,106 +482,906 @@ CurveEditor::~CurveEditor() {
 
 }
 
-EditorHolder::EditorHolder() : UIElement() {
+EditorHolder::EditorHolder(PolycodeProject *project, PolycodeEditorManager *editorManager, EditorHolder *parentHolder) : UIElement() {
+	this->editorManager = editorManager;
+	this->parentHolder = parentHolder;
+	this->project = project;
+	
 	currentEditor = NULL;
-}
+	
+	holderBar = new UIElement();
+	addChild(holderBar);
+	
+	snapToPixels = true;
+	
+	headerBg = new UIRect(30, 30);
+	holderBar->addChild(headerBg);
+	headerBg->color.setColorHexFromString(CoreServices::getInstance()->getConfig()->getStringValue("Polycode", "uiHeaderBgColor"));
+	
+	vSplitButton = new UIImageButton("main/editor_vsplit.png", 1.0, 19, 13);
+	holderBar->addChild(vSplitButton);
+	vSplitButton->addEventListener(this, UIEvent::CLICK_EVENT);
 
-EditorHolder::~EditorHolder() {
+	hSplitButton = new UIImageButton("main/editor_hsplit.png", 1.0, 19, 13);
+	holderBar->addChild(hSplitButton);
+	hSplitButton->addEventListener(this, UIEvent::CLICK_EVENT);	
 
-}
+	mergeSplitButton = new UIImageButton("main/editor_mergesplit.png", 1.0, 19, 13);
+	holderBar->addChild(mergeSplitButton);
+	mergeSplitButton->addEventListener(this, UIEvent::CLICK_EVENT);	
 		
-void EditorHolder::Resize(Number width, Number height) {
-	if(currentEditor) {
-		currentEditor->Resize(width, height);
+	closeFileButton = new UIImageButton("main/remove_icon.png", 1.0, 12, 12);
+	holderBar->addChild(closeFileButton);
+	closeFileButton->setPosition(10, 8);
+	closeFileButton->addEventListener(this, UIEvent::CLICK_EVENT);
+	
+	currentFileSelector = new UIComboBox(globalMenu, 350);
+	currentFileSelector->addEventListener(this, UIEvent::CHANGE_EVENT);
+	holderBar->addChild(currentFileSelector);
+	currentFileSelector->setPosition(30, 3);
+
+	addEventListener(this, InputEvent::EVENT_MOUSEDOWN);
+			
+	vSizer = NULL;
+	hSizer = NULL;
+	
+	firstChildHolder = NULL;
+	secondChildHolder = NULL;
+	
+	displayFilePathInSelector = false;
+	
+	initialUpdate = true;
+	updateFileSelector();
+	
+	editorToMerge = NULL;
+	isActive = false;
+    
+    setOwnsChildrenRecursive(true);
+}
+
+void EditorHolder::activateEditor(bool val) {
+	if(firstChildHolder) {
+		firstChildHolder->activateEditor(val);
+		secondChildHolder->activateEditor(val);
+		return;
+	}
+    if(currentEditor) {
+        if(val) {
+            currentEditor->Activate();
+        } else {
+            currentEditor->Deactivate();
+        }
+    }
+}
+
+ObjectEntry *EditorHolder::getEditorHolderConfig() {
+	ObjectEntry *configEntry = new ObjectEntry();
+	configEntry->name = "editor_holder";
+	
+	if(vSizer) {	
+		configEntry->addChild("split", "vsplit");
+		ObjectEntry *childEditors = configEntry->addChild("child_editors");
+		childEditors->addChild(firstChildHolder->getEditorHolderConfig())->addChild("size", vSizer->getMainHeight());
+		childEditors->addChild(secondChildHolder->getEditorHolderConfig());				
+	} else if(hSizer) {
+		configEntry->addChild("split", "hsplit");
+		ObjectEntry *childEditors = configEntry->addChild("child_editors");
+		childEditors->addChild(firstChildHolder->getEditorHolderConfig())->addChild("size", hSizer->getMainWidth());
+		childEditors->addChild(secondChildHolder->getEditorHolderConfig());				
+	} else {
+		configEntry->addChild("split", "none");	
+		if(currentEditor) {
+			configEntry->addChild("file_name", 	currentEditor->getFilePath());
+			ObjectEntry *editorConfig = currentEditor->getEditorConfig();
+			if(editorConfig) {
+				configEntry->addChild(editorConfig)->name = "editor_config";
+			}			
+		}
+
+	}
+	return configEntry;
+}
+
+void EditorHolder::applyConfig(ObjectEntry *entry) {
+	ObjectEntry *splitEntry = (*entry)["split"];
+	if(splitEntry) {
+		if(splitEntry->stringVal == "none") {
+			ObjectEntry *fileNameEntry = (*entry)["file_name"];
+			if(fileNameEntry) {
+				OSFileEntry file = OSFileEntry(fileNameEntry->stringVal, OSFileEntry::TYPE_FILE);
+				PolycodeEditor *editor = globalEditorManager->openFile(file);
+				if(editor) {
+					setEditor(editor);
+					ObjectEntry *editorConfig = (*entry)["editor_config"];
+					if(editorConfig) {
+						editor->applyEditorConfig(editorConfig);
+					}
+				}	
+			}
+		} else {
+			if(splitEntry->stringVal == "hsplit") {
+				makeHSplit();
+			} else {
+				makeVSplit();
+			}
+			
+			ObjectEntry *childEntries = (*entry)["child_editors"];
+			if(childEntries) {
+				ObjectEntry *firstChildEntry = (*childEntries)[0];
+				if(firstChildEntry) {
+					firstChildHolder->applyConfig(firstChildEntry);
+					if(vSizer) {
+						vSizer->setMainHeightWithMinimum((*firstChildEntry)["size"]->NumberVal);
+					} else if(hSizer) {
+						hSizer->setMainWidthWithMinimum((*firstChildEntry)["size"]->NumberVal);
+					}
+				}
+				ObjectEntry *secondChildEntry = (*childEntries)[1];
+				if(secondChildEntry) {
+					secondChildHolder->applyConfig(secondChildEntry);
+				}				
+			}
+			
+		}
 	}
 }
 
+void EditorHolder::setActive(bool val) {
 
-PolycodeFrame::PolycodeFrame() : ScreenEntity() {
+	isActive = val;
+	
+	if(firstChildHolder) {
+		firstChildHolder->setActive(val);
+		return;
+	}	
+	
+	if(val) {	
+		headerBg->color.setColorHexFromString(CoreServices::getInstance()->getConfig()->getStringValue("Polycode", "uiAccentColor"));
+		if(activeEditorHolder && activeEditorHolder != this) {
+			activeEditorHolder->setActive(false);
+		}
+		activeEditorHolder = this;
+		editorManager->setCurrentEditor(currentEditor);
+	} else {
+		headerBg->color.setColorHexFromString(CoreServices::getInstance()->getConfig()->getStringValue("Polycode", "uiHeaderBgColor"));
+	}
+}
 
+void EditorHolder::updateFileSelector() {
+	currentFileSelector->removeAllHandlersForListener(this);
+	currentFileSelector->clearItems();
+	
+	std::vector<PolycodeEditor*> editors = editorManager->getOpenEditorsForProject(project);
+
+	for(int i=0; i < editors.size(); i++) {
+		OSFileEntry entry(editors[i]->getFilePath(), OSFileEntry::TYPE_FILE);
+		
+		String projName = editors[i]->parentProject->getProjectName();
+		String rootFolder = editors[i]->parentProject->getRootFolder();
+		String filePath = editors[i]->getFilePath();
+		
+		String fullEntry = filePath;
+		if(filePath.find(rootFolder) != -1) {
+			fullEntry = projName + filePath.substr(rootFolder.size(), filePath.size()-1);
+		}
+		if(editors[i]->hasChanges()) {
+			if (displayFilePathInSelector)
+				currentFileSelector->addComboItem("* "+fullEntry, (void*)editors[i]);
+			else
+				currentFileSelector->addComboItem("* "+entry.name, (void*)editors[i]);
+		} else {
+			if (displayFilePathInSelector)
+				currentFileSelector->addComboItem(fullEntry, (void*)editors[i]);
+			else
+				currentFileSelector->addComboItem(entry.name, (void*)editors[i]);
+		}
+		
+		if(currentEditor == editors[i]) {
+			if(!initialUpdate) {
+				currentFileSelector->setSelectedIndex(i);
+			}
+		}
+	}
+	
+	if(firstChildHolder) {
+		firstChildHolder->updateFileSelector();
+	}
+	if(secondChildHolder) {
+		secondChildHolder->updateFileSelector();
+	}
+	currentFileSelector->addEventListener(this, UIEvent::CHANGE_EVENT);
+	initialUpdate = false;
+}
+
+void EditorHolder::setEditor(PolycodeEditor *newEditor) {
+
+	if(vSizer || hSizer) {
+		firstChildHolder->setEditor(newEditor);
+		return;
+	}
+
+	if(currentEditor) {
+		removeChild(currentEditor);
+        currentEditor->Deactivate();
+		currentEditor->setEditorHolder(NULL);
+	}
+	currentEditor = newEditor;
+	if(currentEditor) {
+        currentEditor->Activate();
+		EditorHolder *currentEditorHolder = currentEditor->getEditorHolder();
+		if(currentEditorHolder) {
+			currentEditorHolder->setEditor(NULL);
+		}
+		if(currentEditor) {
+			currentEditor->setEditorHolder(this);	
+		}
+		addChild(currentEditor);
+	}
+
+	updateFileSelector();
+    
+	if(isActive) {
+		editorManager->setCurrentEditor(currentEditor);
+	}
+    
+	Resize(getWidth(), getHeight());
+}
+
+PolycodeEditor *EditorHolder::getEditor() {
+	return currentEditor;
+}
+
+void EditorHolder::makeVSplit() {
+	holderBar->visible = false;
+	holderBar->enabled = false;
+
+	vSizer = new UIVSizer(getWidth(), getHeight(), getHeight()/2.0, true);
+	vSizer->setMinimumSize(200);
+	vSizer->setProportionalResize(true);
+	
+	addChild(vSizer);
+	firstChildHolder = new EditorHolder(project, editorManager, this);
+	firstChildHolder->addEventListener(this, UIEvent::CLOSE_EVENT);
+	vSizer->addTopChild(firstChildHolder);		
+	if(isActive) {
+		firstChildHolder->setActive(true);
+	}		
+	secondChildHolder = new EditorHolder(project, editorManager, this);
+	secondChildHolder->addEventListener(this, UIEvent::CLOSE_EVENT);
+	vSizer->addBottomChild(secondChildHolder);
+
+
+	if(currentEditor) {
+		removeChild(currentEditor);
+		currentEditor->setEditorHolder(NULL);			
+		firstChildHolder->setEditor(currentEditor);
+		currentEditor = NULL;
+	}
+    Resize(getWidth(), getHeight());
+}
+
+void EditorHolder::makeHSplit() {
+	holderBar->visible = false;
+	holderBar->enabled = false;
+	
+	hSizer = new UIHSizer(getWidth(), getHeight(), getWidth()/2.0, true);
+	hSizer->setMinimumSize(200);
+	hSizer->setProportionalResize(true);
+	
+	addChild(hSizer);
+	firstChildHolder = new EditorHolder(project, editorManager, this);
+	firstChildHolder->addEventListener(this, UIEvent::CLOSE_EVENT);		
+	hSizer->addLeftChild(firstChildHolder);
+	secondChildHolder = new EditorHolder(project, editorManager, this);
+	secondChildHolder->addEventListener(this, UIEvent::CLOSE_EVENT);		
+	hSizer->addRightChild(secondChildHolder);
+	if(isActive) {
+		firstChildHolder->setActive(true);
+	}		
+	
+	if(currentEditor) {
+		removeChild(currentEditor);
+		currentEditor->setEditorHolder(NULL);
+		firstChildHolder->setEditor(currentEditor);
+		currentEditor = NULL;
+	}
+    Resize(getWidth(), getHeight());    
+}
+
+void EditorHolder::handleEvent(Event *event) {
+
+	if(event->getDispatcher() == this) {
+		if(holderBar->visible) {
+			setActive(true);
+		}
+	} else if(event->getDispatcher() == vSplitButton) {
+		makeVSplit();
+	} else if(event->getDispatcher() == hSplitButton) {
+		makeHSplit();								
+	} else if(event->getDispatcher() == currentFileSelector) {
+		PolycodeEditor *editor = (PolycodeEditor*) currentFileSelector->getSelectedItem()->data;
+		if(currentEditor != editor) {
+			setEditor(editor);
+            Resize(getWidth(), getHeight());
+		}
+	
+	} else if(event->getDispatcher() == mergeSplitButton) {
+		if(parentHolder) {
+			parentHolder->mergeSides(this);
+            Resize(getWidth(), getHeight());
+		}
+	} else if(event->getDispatcher() == closeFileButton) {
+		dispatchEvent(new UIEvent(), UIEvent::CLOSE_EVENT);
+	} else if(event->getDispatcher() == firstChildHolder || event->getDispatcher() == secondChildHolder) {
+		if(event->getEventCode() == UIEvent::CLOSE_EVENT) {
+			dispatchEvent(new UIEvent(), UIEvent::CLOSE_EVENT);		
+		}
+        Resize(getWidth(), getHeight());
+	}
+	
+	UIElement::handleEvent(event);
+}
+
+void EditorHolder::Update() {
+	if(editorToMerge) {
+		_mergeSides(editorToMerge);
+		editorToMerge = NULL;
+	}
+}
+
+void EditorHolder::mergeSides(EditorHolder *mainHolder) {
+	editorToMerge = mainHolder;
+}
+
+void EditorHolder::_mergeSides(EditorHolder *mainHolder) {
+	holderBar->visible = true;
+	holderBar->enabled = true;
+
+    activeEditorHolder = this;
+    
+	PolycodeEditor *mainHolderEditor = mainHolder->getEditor();
+		
+	if(firstChildHolder) {
+		PolycodeEditor *holderEditor = firstChildHolder->getEditor();
+		if(holderEditor) {
+			holderEditor->setEditorHolder(NULL);
+		}
+	}
+
+	if(secondChildHolder) {
+		PolycodeEditor *holderEditor = secondChildHolder->getEditor();
+		if(holderEditor) {		
+			holderEditor->setEditorHolder(NULL);
+		}
+	}
+	
+	if(vSizer) {
+		removeChild(vSizer);
+		delete vSizer;
+	}
+	if(hSizer) {
+		removeChild(hSizer);
+		delete hSizer;
+	}
+    
+    firstChildHolder->setOwnsChildrenRecursive(false);
+    secondChildHolder->setOwnsChildrenRecursive(false);
+    
+	delete firstChildHolder;
+	delete secondChildHolder;
+	
+	firstChildHolder = NULL;
+	secondChildHolder = NULL;
+	vSizer = NULL;
+	hSizer = NULL;
+	
+	setActive(true);
+	setEditor(mainHolderEditor);
+}
+
+EditorHolder::~EditorHolder() {
+	if(vSizer) {
+		removeChild(vSizer);
+		delete vSizer;
+	}
+	if(hSizer) {
+		removeChild(hSizer);
+		delete hSizer;
+	}	
+	
+	if(firstChildHolder) {
+		delete firstChildHolder;
+	}
+	if(secondChildHolder) {
+		delete secondChildHolder;
+	}
+}
+		
+void EditorHolder::Resize(Number width, Number height) {
+
+	if(headerBg->visible) {
+		headerBg->Resize(width, 30);	
+		hSplitButton->setPosition(width - 30, 7);
+		vSplitButton->setPosition(width - 55, 7);
+		if(parentHolder) {
+			mergeSplitButton->visible = true;
+			mergeSplitButton->enabled = true;
+			mergeSplitButton->setPosition(width - 80, 7);
+			currentFileSelector->Resize(width - 125, currentFileSelector->getHeight());
+		} else {
+			mergeSplitButton->visible = false;
+			mergeSplitButton->enabled = false;			
+			currentFileSelector->Resize(width - 100, currentFileSelector->getHeight());			
+		}
+	}
+		
+	
+	if(currentEditor) {
+		currentEditor->setPosition(0, 30);
+		currentEditor->Resize(width, height-30);
+	}
+	
+	if(vSizer) {
+		vSizer->Resize(width, height);
+	}
+	if(hSizer) {
+		hSizer->Resize(width, height);
+	}
+	
+	UIElement::Resize(width, height);
+}
+
+PolycodeProjectTab::PolycodeProjectTab(String caption, PolycodeProject *project, PolycodeEditorManager *editorManager) : UIElement() {
+
+	tabName = caption;
+	
+	this->editorManager = editorManager;
+
+	editorHolder = new EditorHolder(project, editorManager, NULL);
+	editorHolder->setActive(true);
+	editorHolder->addEventListener(this, UIEvent::CLOSE_EVENT);
+	
+	mainSizer = new UIHSizer(100,100,200,true);
+	mainSizer->setMinimumSize(100);
+	addChild(mainSizer);					
+	projectBrowser = new PolycodeProjectBrowser(project);
+	mainSizer->addLeftChild(projectBrowser);
+	mainSizer->addRightChild(editorHolder);
+
+	active = false;
+
+	projectBrowser->treeContainer->getRootNode()->addEventListener(this, UITreeEvent::DRAG_START_EVENT);
+}
+
+void PolycodeProjectTab::setActive(bool val) {
+	active = val;
+    editorHolder->activateEditor(val);
+    
+	if(!active) {
+		projectBrowser->removeAllHandlers();
+    }
+}
+
+bool PolycodeProjectTab::isActive() {
+	return active;
+}
+
+void PolycodeProjectTab::handleEvent(Event *event) {
+	if(event->getDispatcher() == editorHolder && event->getEventCode() == UIEvent::CLOSE_EVENT) {
+		dispatchEvent(new UIEvent(), UIEvent::CLOSE_EVENT);
+	}
+	UIElement::handleEvent(event);
+}
+
+String PolycodeProjectTab::getTabName() {
+	return tabName;
+}
+
+ObjectEntry *PolycodeProjectTab::getTabConfig() {
+	ObjectEntry *configEntry = new ObjectEntry();
+	configEntry->name = "tab";
+	
+	configEntry->addChild(projectBrowser->getBrowserConfig());
+	
+	configEntry->addChild("tab_name", tabName);	
+	configEntry->addChild("tab_active", isActive());
+	
+	configEntry->addChild(editorHolder->getEditorHolderConfig());
+	return configEntry;
+}
+
+void PolycodeProjectTab::applyTabConfig(ObjectEntry *tabEntry) {
+	ObjectEntry *browserEntry = (*tabEntry)["project_browser"];
+	if(browserEntry) {
+		ObjectEntry *browserWidthEntry = (*browserEntry)["width"];
+		if(browserWidthEntry) {
+			mainSizer->setMainWidth(browserWidthEntry->NumberVal);
+		}
+		projectBrowser->applyBrowserConfig(browserEntry);
+	}
+	
+	ObjectEntry *editorHolderEntry = (*tabEntry)["editor_holder"];
+	if(editorHolderEntry) {
+		editorHolder->applyConfig(editorHolderEntry);
+	}
+}
+
+void PolycodeProjectTab::setTabName(String newName) {
+	tabName = newName;
+}
+
+void PolycodeProjectTab::Resize(Number width, Number height) {
+	mainSizer->Resize(width, height);
+	UIElement::Resize(width, height);
+}
+
+EditorHolder *PolycodeProjectTab::getEditorHolder() {
+	return editorHolder;
+}
+
+void PolycodeProjectTab::showEditor(PolycodeEditor *editor) {
+    if(!activeEditorHolder) {
+        return;
+    }
+    
+	if(activeEditorHolder->getEditor()) {
+		activeEditorHolder->setEditor(NULL);
+	}
+	
+	activeEditorHolder->setEditor(editor);
+	editor->Activate();
+	Resize(getWidth(), getHeight());
+}
+
+PolycodeProjectBrowser *PolycodeProjectTab::getProjectBrowser() {
+	return projectBrowser;
+}
+
+PolycodeProjectTab::~PolycodeProjectTab() {
+
+}
+
+PolycodeTabButton::PolycodeTabButton(PolycodeProjectTab *tab) : UIElement() {
+	this->tab = tab;
+	bgRect = new UIImage("main/tab_bg.png", 150,30);
+	addChild(bgRect);
+	bgRect->processInputEvents = true;
+	processInputEvents = true;
+	bgRect->addEventListener(this, InputEvent::EVENT_MOUSEDOWN);
+	
+	setWidth(150);
+	setHeight(30);
+	
+	tabLabel = new UILabel(tab->getTabName().toUpperCase(), 16, "section");
+    tabLabel->setColor(0.0, 0.0, 0.0, 1.0);
+	tabLabel->setPosition(getWidth()-tabLabel->getWidth()-10.0, ((getHeight()-tabLabel->getHeight())/2.0) - 3.0);
+	addChild(tabLabel);
+	
+	closeButton = new UIImageButton("main/tab_close_button.png", 1.0, 18, 18);
+	closeButton->setPosition(4.0, floor((30.0 - closeButton->getHeight()) / 2.0));
+	addChild(closeButton);
+	closeButton->blockMouseInput = true;
+	closeButton->addEventListener(this, UIEvent::CLICK_EVENT);
+}
+
+void PolycodeTabButton::updateLabel() {
+	tabLabel->setText(tab->getTabName().toUpperCase());
+	tabLabel->setPosition(getWidth()-tabLabel->getWidth()-10.0, ((getHeight()-tabLabel->getHeight())/2.0) - 3.0);
+}
+
+void PolycodeTabButton::handleEvent(Event *event) {
+
+	if(event->getDispatcher() == renamePopup) {
+		renamePopup->removeAllHandlersForListener(this);
+		tabLabel->setText(renamePopup->getValue().toUpperCase());
+		tab->setTabName(renamePopup->getValue());
+		tabLabel->setPosition(getWidth()-tabLabel->getWidth()-10.0, ((getHeight()-tabLabel->getHeight())/2.0) - 3.0);
+	}
+
+	if(event->getDispatcher() == menu) {
+		if(menu->getSelectedItem()->_id == "close_tab") {
+			dispatchEvent(new UIEvent(), UIEvent::CLOSE_EVENT);
+		} else if(menu->getSelectedItem()->_id == "rename_tab") {
+			renamePopup = globalFrame->showTextInput("Enter new tab name.", "rename_tab", tab->getTabName());
+			renamePopup->addEventListener(this, UIEvent::OK_EVENT);
+		}
+	}
+	
+	if(event->getDispatcher() == closeButton) {
+		dispatchEvent(new UIEvent(), UIEvent::CLOSE_EVENT);		
+	}
+	
+	if(event->getDispatcher() == bgRect) {
+		if(event->getEventCode() == InputEvent::EVENT_MOUSEDOWN) {
+			dispatchEvent(new Event(), Event::SELECT_EVENT);
+			InputEvent *inputEvent = (InputEvent*) event;
+			if(inputEvent->getMouseButton() == CoreInput::MOUSE_BUTTON2) {
+				menu = globalMenu->showMenuAtMouse(120);
+				menu->addOption("Rename tab", "rename_tab");
+				menu->addOption("Close tab", "close_tab");
+				menu->addEventListener(this, UIEvent::OK_EVENT);
+			}
+		}		
+	}
+	UIElement::handleEvent(event);
+}
+
+void PolycodeTabButton::setActive(bool val) {
+	if(val) {
+		bgRect->color.a = 0.4;
+	} else {
+		bgRect->color.a = 0.2;	
+	}
+}
+
+PolycodeProjectTab *PolycodeTabButton::getTab() {
+	return tab;
+}
+
+PolycodeTabButton::~PolycodeTabButton() {
+
+}
+
+PolycodeProjectFrame::PolycodeProjectFrame(PolycodeProject *project, PolycodeEditorManager *editorManager) {
+	tabToClose = NULL;
+	this->editorManager = editorManager;
+	this->project = project;
+	lastActiveEditorHolder = NULL;
+	tabButtonAnchor = new UIElement();
+	addChild(tabButtonAnchor);
+	tabButtonAnchor->setPosition(400, -30);
+	
+	activeTab = NULL;
+	
+	newTabButton = new UIImageButton("main/new_tab_button.png", 1.0, 27, 26);
+	tabButtonAnchor->addChild(newTabButton);
+	newTabButton->addEventListener(this, UIEvent::CLICK_EVENT);
+	addNewTab("Default");
+}
+
+void PolycodeProjectFrame::showNextTab() {
+	for(int i=0; i < tabs.size(); i++) {
+		if(tabs[i] == activeTab) {
+			if(i < tabs.size()-1) {
+				showTab(tabs[i+1]);
+				return;				
+			} else {
+				showTab(tabs[0]);	
+				return;				
+			}
+		}
+	}
+}
+
+void PolycodeProjectFrame::showPreviousTab() {
+	for(int i=0; i < tabs.size(); i++) {
+		if(tabs[i] == activeTab) {
+			if(i > 0) {
+				showTab(tabs[i-1]);
+				return;				
+			} else {
+				showTab(tabs[tabs.size()-1]);
+				return;
+			}
+		}
+	}
+}
+
+PolycodeProjectTab *PolycodeProjectFrame::getTabAtIndex(unsigned int index) {
+	return tabs[index];
+}
+
+unsigned int PolycodeProjectFrame::getNumTabs() {
+	return tabs.size();
+}
+
+PolycodeProjectTab *PolycodeProjectFrame::getActiveTab() {
+	return activeTab;
+}
+
+PolycodeProjectTab *PolycodeProjectFrame::addNewTab(String caption) {
+	PolycodeProjectTab *newTab = new PolycodeProjectTab(caption, project, editorManager);
+	tabs.push_back(newTab);
+	
+	PolycodeTabButton *newTabButton = new PolycodeTabButton(newTab);
+	tabButtonAnchor->addChild(newTabButton);
+	tabButtons.push_back(newTabButton);
+	newTabButton->addEventListener(this, Event::SELECT_EVENT);
+	newTabButton->addEventListener(this, UIEvent::CLOSE_EVENT);
+	showTab(newTab);
+	return newTab;
+}
+
+void PolycodeProjectFrame::Update() {
+	if(tabToClose) {
+	
+		// can't close the last tab
+		if(tabs.size() == 1) {
+			tabToClose = NULL;
+			return;
+		}
+		
+		for(int i=0; i < tabs.size(); i++) {
+			if(tabs[i] == tabToClose) {
+				tabs.erase(tabs.begin()+i);
+				break;
+			}
+		}
+		
+		for(int i=0; i < tabButtons.size(); i++) {
+			if(tabButtons[i]->getTab() == tabToClose) {
+				tabButtonAnchor->removeChild(tabButtons[i]);
+				delete tabButtons[i];
+				tabButtons.erase(tabButtons.begin()+i);
+				break;
+			}
+		}
+		
+		if(tabToClose == activeTab) {
+			showTab(tabs[0]);
+		}
+		
+		delete tabToClose;
+		tabToClose = NULL;
+		restructTabs();
+	}
+}
+
+void PolycodeProjectFrame::closeTab(PolycodeProjectTab *tab) {
+	tabToClose = tab;
+}
+
+void PolycodeProjectFrame::showTab(PolycodeProjectTab *tab) {
+	if(activeTab) {
+		activeTab->setActive(false);
+		activeTab->removeAllHandlersForListener(this);
+		removeChild(activeTab);
+	}
+
+	addChild(tab);
+	tab->addEventListener(this, UIEvent::CLOSE_EVENT);
+	tab->setActive(true);
+	tab->getEditorHolder()->setActive(true);
+	tab->Resize(getWidth(), getHeight());
+	activeTab = tab;
+	restructTabs();
+	dispatchEvent(new UIEvent(), Event::CHANGE_EVENT);			
+}
+
+void PolycodeProjectFrame::restructTabs() {
+	int i;
+	for(i=0; i < tabButtons.size(); i++) {
+		tabButtons[i]->setPosition(i * 152.0, 0.0);
+		tabButtons[i]->setActive(tabButtons[i]->getTab()->isActive());		
+		tabButtons[i]->updateLabel();
+	}
+	newTabButton->setPosition((i * 152) + 3, 0.0);
+}
+
+ObjectEntry *PolycodeProjectFrame::getFrameConfig() {
+	ObjectEntry *configEntry = new ObjectEntry();
+	configEntry->name = "frame";
+	
+	ObjectEntry *tabsEntry = configEntry->addChild("tabs");
+	
+	for(int i=0; i < tabs.size(); i++) {
+		tabsEntry->addChild(tabs[i]->getTabConfig());
+	}
+	return configEntry;
+}
+
+void PolycodeProjectFrame::handleEvent(Event *event) {
+	for(int i=0; i < tabs.size(); i++) {
+		if(event->getDispatcher() == tabs[i] && event->getEventCode() == UIEvent::CLOSE_EVENT) {
+			dispatchEvent(new UIEvent, UIEvent::CLOSE_EVENT);
+			return;
+		 } 
+	}
+	
+	if(event->getDispatcher() == newTabButton) {
+		addNewTab();
+	} else {
+		for(int i=0; i < tabButtons.size(); i++) {
+			if(event->getDispatcher() == tabButtons[i]) {
+				if(event->getEventCode() == Event::SELECT_EVENT) {
+					showTab(tabButtons[i]->getTab());
+					break;
+				} else 	if(event->getEventCode() == UIEvent::CLOSE_EVENT) {
+					closeTab(tabButtons[i]->getTab());
+					break;
+				} else 	if(event->getEventCode() == UIEvent::CHANGE_EVENT) {
+					dispatchEvent(new UIEvent(), UIEvent::CHANGE_EVENT);
+					break;
+				}
+			}
+		}
+	}
+}
+
+PolycodeProject *PolycodeProjectFrame::getProject() {
+	return project;
+}
+
+void PolycodeProjectFrame::Resize(Number width, Number height) {
+	activeTab->Resize(width, height);
+	UIElement::Resize(width, height);
+}
+
+PolycodeProjectFrame::~PolycodeProjectFrame() {
+
+}
+
+
+PolycodeFrame::PolycodeFrame(PolycodeEditorManager *editorManager) : UIElement() {
+
+	this->editorManager = editorManager;
+
+	activeProjectFrame = NULL;
+	consoleSize = 200;
+	
 	globalFrame = this;
 	processInputEvents = true;
 	willHideModal = false;
 	showingConsole = true;
 	modalChild = NULL;
 	
-	welcomeEntity = new ScreenEntity();
+	welcomeEntity = new Entity();
 	welcomeEntity->processInputEvents = true;
 	addChild(welcomeEntity);
-	welcomeImage = new ScreenImage("Images/welcome.png");
+	welcomeImage = new UIImage("main/welcome.png", 759, 207);
 	welcomeEntity->addChild(welcomeImage);
 	welcomeEntity->snapToPixels = true;
 	
 	newProjectButton = new UIButton("Create A New Project!", 220);	
-	newProjectButton->setPosition(230,80);
+	newProjectButton->setPosition(260,120);
 	newProjectButton->addEventListener(this, UIEvent::CLICK_EVENT);
 	
 	examplesButton = new UIButton("Browse Example Projects!", 220);	
-	examplesButton->setPosition(460,80);
+	examplesButton->setPosition(490,120);
 	examplesButton->addEventListener(this, UIEvent::CLICK_EVENT);
 	
 	welcomeEntity->addChild(newProjectButton);
 	welcomeEntity->addChild(examplesButton);
 	
-	mainSizer = new UIHSizer(100,100,200,true);
-	mainSizer->setPosition(0, 45);
-	addChild(mainSizer);
-
-	consoleSize = 200;
-
-	consoleSizer = new UIVSizer(100,100,200, false);
-	mainSizer->addRightChild(consoleSizer);	
-				
-	projectBrowser = new PolycodeProjectBrowser();
-	mainSizer->addLeftChild(projectBrowser);
-
-	editorHolder = new EditorHolder();
-	consoleSizer->addTopChild(editorHolder);
 	
-	console = new PolycodeConsole();	
-	consoleSizer->addBottomChild(console);	
-		
-	projectBrowser->treeContainer->getRootNode()->addEventListener(this, UITreeEvent::DRAG_START_EVENT);
-	
-	topBarBg = new ScreenShape(ScreenShape::SHAPE_RECT, 2,2);
+	topBarBg = new UIRect(2,2);
 	topBarBg->setColorInt(21, 18, 17, 255);
-	topBarBg->setPositionMode(ScreenEntity::POSITION_TOPLEFT);
+	topBarBg->setAnchorPoint(-1.0, -1.0, 0.0);
 	topBarBg->processInputEvents = true;
 	topBarBg->addEventListener(this, InputEvent::EVENT_MOUSEMOVE);
 	topBarBg->blockMouseInput = true;
 	addChild(topBarBg);
+
+	consoleSizer = new UIVSizer(100,100,200, false);
+	console = new PolycodeConsole();	
+	consoleSizer->addBottomChild(console);
+	addChild(consoleSizer);
+	consoleSizer->setPosition(0.0, 45);
 	
-	logo = new ScreenImage("Images/barlogo.png");	
-	addChild(logo);		
+	logo = new UIImage("main/barLogo.png", 38, 38);
+	addChild(logo);
 	
-	
-	playButton = new UIImageButton("Images/play_button.png");
+	playButton = new UIImageButton("main/play_button.png", 1.0, 32, 32);
 	addChild(playButton);
-	playButton->setPosition(10,4);
+	playButton->setPosition(10,5);
 
-	stopButton = new UIImageButton("Images/stop_button.png");
+	stopButton = new UIImageButton("main/stop_button.png", 1.0, 32, 32);
 	addChild(stopButton);
-	stopButton->setPosition(10,4);
+	stopButton->setPosition(10,5);
 
-	currentProjectTitle = new ScreenLabel("", 32, "section");
-	addChild(currentProjectTitle);
-	currentProjectTitle->color.a = 0.4;
-	currentProjectTitle->setPosition(70, 0);
-
-	currentFileSelector = new UIComboBox(globalMenu, 350);
-	currentFileSelector->addEventListener(this, UIEvent::CHANGE_EVENT);
-	addChild(currentFileSelector);
-
-	closeFileButton = new UIImageButton("Images/remove_icon.png");
-	addChild(closeFileButton);
+	currentProjectSelector = new UIComboBox(globalMenu, 300);
+	currentProjectSelector->addEventListener(this, UIEvent::CHANGE_EVENT);
+	addChild(currentProjectSelector);
+	currentProjectSelector->setPosition(60, 10);
 	
-	resizer = new ScreenImage("Images/corner_resize.png");	
+	resizer = new UIImage("main/corner_resize.png", 14, 14);
 	addChild(resizer);
 	resizer->setColor(0,0,0,0.4);
 	
-	modalBlocker = new ScreenShape(ScreenShape::SHAPE_RECT, 10,10);
+	modalBlocker = new UIRect(10,10);
+    modalBlocker->setBlendingMode(Renderer::BLEND_MODE_NORMAL);
 	modalBlocker->setColor(0,0,0,0.4);
-	modalBlocker->setPositionMode(ScreenEntity::POSITION_TOPLEFT);
+	modalBlocker->setAnchorPoint(-1.0, -1.0, 0.0);
 	modalBlocker->enabled = false;	
 	modalBlocker->blockMouseInput = true;
 	modalBlocker->processInputEvents = true;
@@ -607,6 +1410,9 @@ PolycodeFrame::PolycodeFrame() : ScreenEntity() {
 	
 	yesNoPopup = new YesNoPopup();
 	yesNoPopup->visible = false;
+    
+    messagePopup = new MessagePopup();
+    messagePopup->visible = false;
 	
 	yesNoCancelPopup = new YesNoCancelPopup();
 	yesNoCancelPopup->visible = false;
@@ -614,7 +1420,7 @@ PolycodeFrame::PolycodeFrame() : ScreenEntity() {
 	
 	aboutWindow = new UIWindow("", 800, 440);
 	aboutWindow->closeOnEscape = true;
-	ScreenImage *aboutImage = new ScreenImage("Images/about.png");
+	UIImage *aboutImage = new UIImage("main/about.png", 321, 122);
 	aboutWindow->addChild(aboutImage);
 	aboutImage->setPosition(20, 40);
 	aboutWindow->visible = false;
@@ -623,16 +1429,31 @@ PolycodeFrame::PolycodeFrame() : ScreenEntity() {
 	aboutOKButton->setPosition(700, 420);
 	aboutOKButton->addEventListener(this, UIEvent::CLICK_EVENT);
 	
-	ScreenLabel *versionLabel = new ScreenLabel("version 0.8.2", 12, "mono");
+    String info1Text = "Polycode is developed by:\n\nProject lead:\nIvan Safrin\n\nTop project contributors in order of commits:\nCameron Hart, Andi McClure, samiamwork, Christian Bielert,\nChristopher Reed, TheCosmotect, Danny Warren, Paul Smith,\nDevin Stone, Jon Kristinsson, Henry Maddocks,\nJohan Klokkhammer Helsing, Chris Ledet, Per Bodin, Quinlan P.,\nLee-R, Guillaume Papin, Remi Gillig, ZenX2,\nMatt Tuttle, Alejandro Cámara, Jake Scott, tastymorsel";
+    
+    UIMultilineLabel *info1 = new UIMultilineLabel(info1Text, 12, 5);
+    aboutWindow->addChild(info1);
+    info1->setPosition(40, 200);
+    
+    String info2Text = "Polycode uses the following open-source libraries:\n\nAssimp (BSD license)\nBox2D (zlib license)\nBullet Physics (zlib license)\nFreetype (Freetype license)\nlibpng (libpng license)\nLua (MIT license),\nOggVorbis (BSD license)\nPhysFS (zlib license)\ntinyXML (zlib license)\nSDL (on Linux only) (zlib license)\n\nPolycode itself is distributed\nunder the MIT license.\n\n\n\nThank you for using Polycode!";
+    
+    UIMultilineLabel *info2 = new UIMultilineLabel(info2Text, 12, 5);
+    aboutWindow->addChild(info2);
+    info2->setPosition(450, 40);
+
+	UILabel *versionLabel = new UILabel("version "POLYCODE_VERSION_STRING, 12, "mono");
 	aboutWindow->addChild(versionLabel);
-	versionLabel->setPosition(20, 430);
-	versionLabel->color.a = 0.4;
+	versionLabel->setPosition(40, 430);
+	versionLabel->color.a = 1.0;
 	
+	assetImporterWindow = new AssetImporterWindow();
+	
+		
 	isDragging  = false;
-	dragLabel = new ScreenLabel("NONE", 11, "sans");
+	dragLabel = new UILabel("NONE", 11, "sans");
 	dragLabel->setPosition(0,-15);
 	
-	dragEntity = new ScreenEntity();
+	dragEntity = new Entity();
 	dragEntity->addChild(dragLabel);
 	addChild(dragEntity);
 	dragEntity->visible = false;	
@@ -651,13 +1472,14 @@ PolycodeFrame::PolycodeFrame() : ScreenEntity() {
 		
 	globalColorPicker = new UIColorPicker();
 	globalColorPicker->setPosition(300,300);
+    globalColorPicker->setContinuous(false);
 	addChild(globalColorPicker);
 
 	modalRoot = new UIElement();
 	addChild(modalRoot);
 	
-	fileDialogBlocker = new ScreenShape(ScreenShape::SHAPE_RECT, 100, 100);
-	fileDialogBlocker->setPositionMode(ScreenEntity::POSITION_TOPLEFT);
+	fileDialogBlocker = new UIRect(100, 100);
+	fileDialogBlocker->setAnchorPoint(-1.0, -1.0, 0.0);
 	addChild(fileDialogBlocker);
 	fileDialogBlocker->setColor(0.0, 0.0, 0.0, 0.5);
 	fileDialogBlocker->processInputEvents = true;
@@ -702,7 +1524,7 @@ void PolycodeFrame::showModal(UIWindow *modalChild) {
 	modalRoot->addChild(modalChild);
 	modalChild->showWindow();
 	modalChild->addEventListener(this, UIEvent::CLOSE_EVENT);
-	Resize(frameSizeX, frameSizeY);
+	Resize(getWidth(), getHeight());
 	
 	if(modalChild == yesNoPopup) {
 		yesNoPopup->focusChild(yesNoPopup->okButton);
@@ -710,52 +1532,20 @@ void PolycodeFrame::showModal(UIWindow *modalChild) {
 	CoreServices::getInstance()->getCore()->setCursor(Core::CURSOR_ARROW);	
 }
 
-PolycodeProjectBrowser *PolycodeFrame::getProjectBrowser() {
-	return projectBrowser;
-}
-
-void PolycodeFrame::removeEditor(PolycodeEditor *editor) {
-	for(int i=0; i < editors.size(); i++) {
-		if(editors[i] == editor) {
-			editors.erase(editors.begin()+i);
-			editorHolder->removeChild(editor);
-			if(editor == editorHolder->currentEditor) {
-				editorHolder->currentEditor = NULL;
-			}
-			return;
-		}
-	}
-}
-
-void PolycodeFrame::addEditor(PolycodeEditor *editor) {
-	editors.push_back(editor);
-	editorHolder->addChild(editor);
-	editor->enabled = false;
-}
-
-void PolycodeFrame::showEditor(PolycodeEditor *editor) {
-	if(editorHolder->currentEditor) {
-		editorHolder->currentEditor->enabled = false;
-		editorHolder->currentEditor = NULL;
-	}
-	
-	editorHolder->currentEditor = editor;
-	editorHolder->currentEditor->enabled = true;
-	editorHolder->currentEditor->Activate();
-	
-	Resize(frameSizeX, frameSizeY);
-}
-
 void PolycodeFrame::hideModal() {
 	if(modalChild) {
 		modalRoot->removeChild(modalChild);
-		modalChild->removeEventListener(this, UIEvent::CLOSE_EVENT);	
+		assetBrowser->removeAllHandlers();
 		modalChild->hideWindow(); 
 		modalChild = NULL;
 	}
 	modalBlocker->enabled = false;		
 }
 
+bool PolycodeFrame::isShowingConsole() {
+	return showingConsole;
+}
+	
 void PolycodeFrame::showConsole() {
 	if(!showingConsole)
 		toggleConsole();
@@ -780,11 +1570,37 @@ void PolycodeFrame::toggleConsole() {
 	showingConsole = !showingConsole;
 }
 
+Number PolycodeFrame::getConsoleSize() {
+	if(showingConsole) {
+		return consoleSizer->getMainHeight();
+	} else {
+		return consoleSize;
+	}
+}
+
 void PolycodeFrame::Update() {
 	if(willHideModal) {
 		hideModal();
 		willHideModal = false;
 	}
+}
+
+TextInputPopup * PolycodeFrame::showTextInput(String caption, String action, String value) {
+	textInputPopup->action = action;
+	textInputPopup->setCaption(caption);
+	textInputPopup->setValue(value);
+	showModal(textInputPopup);
+	return textInputPopup;
+}
+
+void PolycodeFrame::showAssetBrowserForPools(std::vector<ResourcePool*> pools, int resourceType) {
+	if(!projectManager->getActiveProject()) {
+		return;
+	}
+	assetBrowser->setResourcePools(pools, resourceType);
+    assetBrowser->setBrowseMode(AssetBrowser::BROWSE_MODE_RESOURCES);
+	showModal(assetBrowser);
+    
 }
 
 void PolycodeFrame::showAssetBrowser(std::vector<String> extensions) {
@@ -793,20 +1609,29 @@ void PolycodeFrame::showAssetBrowser(std::vector<String> extensions) {
 	}
 	assetBrowser->setProject(projectManager->getActiveProject());
 	assetBrowser->setExtensions(extensions);
+   assetBrowser->setBrowseMode(AssetBrowser::BROWSE_MODE_FILES);
 	showModal(assetBrowser);
 }
 
 void PolycodeFrame::handleEvent(Event *event) {
-	
-	if(event->getDispatcher() == currentFileSelector && event->getEventType() == "UIEvent") {
-		PolycodeEditor *editor = editorManager->openEditors[currentFileSelector->getSelectedIndex()];
-		
-		if(editorManager->getCurrentEditor() != editor) {
-			editorManager->setCurrentEditor(editor, false);
-			showEditor(editor);
+
+	if(event->getDispatcher() == activeProjectFrame) {
+		if(event->getEventCode() == Event::CHANGE_EVENT) {
+			dispatchEvent(new Event(), Event::CHANGE_EVENT);
 		}
 	}
-	
+
+	if(event->getDispatcher() == activeProjectFrame) {
+		if(event->getEventCode() == UIEvent::CLOSE_EVENT) {
+			dispatchEvent(new UIEvent(), UIEvent::CLOSE_EVENT);
+		}
+	}
+
+	if(event->getDispatcher() == currentProjectSelector) {
+		PolycodeProject *project = (PolycodeProject*)currentProjectSelector->getSelectedItem()->data;
+		projectManager->setActiveProject(project);
+	}
+		
 	if(event->getDispatcher() == editorManager) {
 		updateFileSelector();
 	}
@@ -816,11 +1641,14 @@ void PolycodeFrame::handleEvent(Event *event) {
 	}
 	
 	if(event->getDispatcher() == projectManager) {
-        if(projectManager->getActiveProject()) {
-            currentProjectTitle->setText(projectManager->getActiveProject()->getProjectName());
-        } else {
-        	if (projectManager->getProjectCount() == 0) { currentProjectTitle->setText(""); }
-        }
+		currentProjectSelector->clearItems();
+		for(int i=0; i < projectManager->getProjectCount(); i++) {
+			PolycodeProject *project = projectManager->getProjectByIndex(i);
+			currentProjectSelector->addComboItem(project->getProjectName(), (void*) project);
+			if(projectManager->getActiveProject() == project) {
+				currentProjectSelector->setSelectedIndex(i, true);
+			}
+		}
 	}
 	
 	if(event->getDispatcher() == aboutOKButton && event->getEventType() == "UIEvent") {
@@ -837,19 +1665,21 @@ void PolycodeFrame::handleEvent(Event *event) {
 		switch(event->getEventCode()) {
 			case InputEvent::EVENT_MOUSEUP:
 				if(isDragging) {
+				/*
 					if(editorHolder->currentEditor) {
 						InputEvent *inputEvent = (InputEvent*) event;						
 						Number posX = inputEvent->mousePosition.x;
 						Number posY = inputEvent->mousePosition.y;			
 						editorHolder->currentEditor->handleDroppedFile(draggedFile, posX, posY);
 					}
+				*/
 				}
 				isDragging = false;
 				dragEntity->visible = false;
 			break;
 			case InputEvent::EVENT_MOUSEMOVE:			
 				if(isDragging) {
-					dragEntity->setPosition(((InputEvent*)event)->mousePosition);
+					//dragEntity->setPosition(((InputEvent*)event)->mousePosition);
 				}
 			break;
 			// TODO: add in key combos to switch editors in reverse order
@@ -867,19 +1697,20 @@ void PolycodeFrame::handleEvent(Event *event) {
 						updateFileSelector();
 					}
 				} else if (input->getKeyState(KEY_LCTRL) || input->getKeyState(KEY_RCTRL)) {
-					InputEvent *inEv = (InputEvent*)event;
-					if (inEv->getKey() == KEY_TAB) {
-						showNextEditor();
-					} else if (inEv->getKey() == KEY_SLASH) {
-						displayFilePathInSelector = (displayFilePathInSelector ? false : true);
-						updateFileSelector();
-					}
+//					InputEvent *inEv = (InputEvent*)event;
+//					if (inEv->getKey() == KEY_TAB) {
+//						showNextEditor();
+//					} else if (inEv->getKey() == KEY_SLASH) {
+//						displayFilePathInSelector = (displayFilePathInSelector ? false : true);
+//						updateFileSelector();
+//					}
 				}
 			break;
 				
 		}
 	}
 
+/*
 	if(event->getDispatcher() == projectBrowser->treeContainer->getRootNode()) {
 		switch (event->getEventCode()) {
 			case UITreeEvent::DRAG_START_EVENT:
@@ -895,6 +1726,7 @@ void PolycodeFrame::handleEvent(Event *event) {
 			break;
 		}
 	}
+*/
 
 	if(event->getDispatcher() == modalChild) {
 		if(event->getEventType() == "UIEvent" && event->getEventCode() == UIEvent::CLOSE_EVENT) {
@@ -916,75 +1748,96 @@ void PolycodeFrame::handleEvent(Event *event) {
 	}
 }
 
+PolycodeProjectBrowser *PolycodeFrame::getCurrentProjectBrowser() {
+	if(activeProjectFrame) {
+		return activeProjectFrame->getActiveTab()->getProjectBrowser();
+	} else {
+		return NULL;
+	}
+}
+
 void PolycodeFrame::Resize(int x, int y) {	
-	
-	frameSizeX = x;
-	frameSizeY = y;
-	
+		
 	welcomeEntity->setPosition((x-welcomeImage->getWidth()) / 2,
 		(y-welcomeImage->getHeight()) / 2); 
 	
-	topBarBg->setShapeSize(x, 45);
-	logo->setPosition(x-logo->getWidth()-2, 2);	
+	topBarBg->Resize(x, 45);
+	logo->setPosition(x-logo->getWidth()-2, 2);
 	resizer->setPosition(x-resizer->getWidth()-1, y-resizer->getHeight()-1);	
-	mainSizer->Resize(x,y-45);	
+	consoleSizer->Resize(x,y-45);	
 	
-	modalBlocker->setShapeSize(x, y);
-	fileDialogBlocker->setShapeSize(x, y);
-		
-	currentFileSelector->setPosition(x-400, 11);
-	closeFileButton->setPosition(currentFileSelector->getPosition().x-20, currentFileSelector->getPosition().y+6);
-	
+	modalBlocker->Resize(x, y);
+	fileDialogBlocker->Resize(x, y);
+			
 	if(this->modalChild) {
 		modalChild->setPosition((x-modalChild->getWidth())/2.0f, (y-modalChild->getHeight())/2.0f);
 	}
+	
+	UIElement::Resize(x, y);
+}
+
+ObjectEntry *PolycodeFrame::getFrameConfigForProject(PolycodeProject *project) {
+	for(int i=0; i < projectFrames.size(); i++) {
+		if(projectFrames[i]->getProject() == project) {
+			return projectFrames[i]->getFrameConfig();
+		}
+	}
+	return NULL;
+}
+
+void PolycodeFrame::removeProjectFrame(PolycodeProject *project) {
+    //TODO: implement. this is being called from PolycodeIDEApp::doCloseProject()
+}
+
+PolycodeProjectFrame *PolycodeFrame::getActiveProjectFrame() {
+	return activeProjectFrame;
 }
 
 PolycodeFrame::~PolycodeFrame() {
 	
 }
 
-void PolycodeFrame::showNextEditor() {
-	if (currentFileSelector->getSelectedIndex() == currentFileSelector->getNumItems()-1)
-		currentFileSelector->setSelectedIndex(0);
-	else
-		currentFileSelector->setSelectedIndex(currentFileSelector->getSelectedIndex()+1);
+UIVSizer *PolycodeFrame::getConsoleSizer() {
+	return consoleSizer;
 }
-void PolycodeFrame::showPreviousEditor() {
-	if (currentFileSelector->getSelectedIndex() == 0)
-		currentFileSelector->setSelectedIndex(currentFileSelector->getNumItems()-1);
-	else
-		currentFileSelector->setSelectedIndex(currentFileSelector->getSelectedIndex()-1);
+
+PolycodeProjectFrame *PolycodeFrame::createProjectFrame(PolycodeProject *project) {
+	PolycodeProjectFrame *newProjectFrame = new PolycodeProjectFrame(project, editorManager);
+	projectFrames.push_back(newProjectFrame);	
+	switchToProjectFrame(newProjectFrame);
+	return newProjectFrame;
+}
+
+void PolycodeFrame::switchToProjectFrame(PolycodeProjectFrame *projectFrame) {
+	if(projectFrame == activeProjectFrame) {
+		return;
+	}
+	if(activeProjectFrame) {
+		consoleSizer->removeTopChild();
+		if(editorManager->getCurrentEditor()) {
+			activeProjectFrame->lastActiveEditorHolder = editorManager->getCurrentEditor()->getEditorHolder();
+		}
+		activeProjectFrame->removeAllHandlersForListener(this);
+	} 
+	activeProjectFrame = projectFrame;
+	consoleSizer->addTopChild(activeProjectFrame);
+	activeProjectFrame->getActiveTab()->getEditorHolder()->setActive(true);
+	activeProjectFrame->addEventListener(this, UIEvent::CLOSE_EVENT);
+	activeProjectFrame->addEventListener(this, Event::CHANGE_EVENT);
+	Resize(getWidth(), getHeight());
+}
+
+PolycodeProjectFrame *PolycodeFrame::getProjectFrame(PolycodeProject *project) {
+	for(int i=0; i < projectFrames.size(); i++) {
+		if(projectFrames[i]->getProject() == project) {
+			return projectFrames[i];
+		}
+	}
+	return NULL;
 }
 
 void PolycodeFrame::updateFileSelector() {
-	currentFileSelector->clearItems();
-	
-	for(int i=0; i < editorManager->openEditors.size(); i++) {
-		OSFileEntry entry(editorManager->openEditors[i]->getFilePath(), OSFileEntry::TYPE_FILE);
-		
-		String projName = editorManager->openEditors[i]->parentProject->getProjectName();
-		String rootFolder = editorManager->openEditors[i]->parentProject->getRootFolder();
-		String filePath = editorManager->openEditors[i]->getFilePath();
-		
-		String fullEntry = filePath;
-		if(filePath.find(rootFolder) != -1) {
-			fullEntry = projName + filePath.substr(rootFolder.size(), filePath.size()-1);
-		}
-		if(editorManager->openEditors[i]->hasChanges()) {
-			if (displayFilePathInSelector)
-				currentFileSelector->addComboItem("* "+fullEntry);
-			else
-				currentFileSelector->addComboItem("* "+entry.name);
-		} else {
-			if (displayFilePathInSelector)
-				currentFileSelector->addComboItem(fullEntry);
-			else
-				currentFileSelector->addComboItem(entry.name);
-		}
-		
-		if(editorManager->getCurrentEditor() == editorManager->openEditors[i]) {
-			currentFileSelector->setSelectedIndex(i);
-		}
+	if(activeProjectFrame)  {
+		activeProjectFrame->getActiveTab()->getEditorHolder()->updateFileSelector();
 	}
 }

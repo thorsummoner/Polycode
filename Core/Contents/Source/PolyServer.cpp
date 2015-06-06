@@ -28,7 +28,7 @@ using namespace Polycode;
 using std::vector;
 
 ServerClient::ServerClient() {
-	
+    clientReady	= false;
 }
 
 ServerClient::~ServerClient() {
@@ -78,6 +78,11 @@ void Server::handleEvent(Event *event) {
 				world->getWorldState(client, &worldData, &worldDataSize);			
 				sendData(client->connection->address, (char*)worldData, worldDataSize, PACKET_TYPE_SERVER_DATA);			
 			}
+		} else {
+			for(int i=0; i < clients.size(); i++) {
+				client = clients[i];
+				sendData(client->connection->address, 0, 0, PACKET_TYPE_SERVER_DATA);			
+			}
 		}
 	}	
 	
@@ -101,6 +106,7 @@ void Server::handlePeerConnection(PeerConnection *connection) {
 	clients.push_back(newClient);	
 
 	unsigned short clientID = newClient->clientID;
+    printf("SENDING PACKET_TYPE_SETCLIENT_ID\n");
 	sendReliableData(newClient->connection->address, (char*)&clientID, sizeof(unsigned short), PACKET_TYPE_SETCLIENT_ID);
 
 }
@@ -142,9 +148,12 @@ void Server::handlePacket(Packet *packet, PeerConnection *connection) {
 	switch (packet->header.type) {
 		case PACKET_TYPE_CLIENT_READY:
 		{
-			ServerEvent *event = new ServerEvent();
-			event->client = client;
-			dispatchEvent(event, ServerEvent::EVENT_CLIENT_CONNECTED);					
+            if(!client->clientReady) {
+                client->clientReady = true;
+                ServerEvent *event = new ServerEvent();
+                event->client = client;
+                dispatchEvent(event, ServerEvent::EVENT_CLIENT_CONNECTED);
+            }
 		}
 		break;
 		case PACKET_TYPE_DISONNECT:

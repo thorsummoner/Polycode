@@ -22,6 +22,8 @@
 
 #include "PolyCoreInput.h"
 #include "PolyInputEvent.h"
+#include "PolyCoreServices.h"
+#include "PolyCore.h"
 
 namespace Polycode {
 	
@@ -38,6 +40,10 @@ namespace Polycode {
 	CoreInput::CoreInput() : EventDispatcher() {
 		clearInput();
 		simulateTouchWithMouse = false;
+		simulateTouchAsPen = false;
+		simulateMouseWithTouch = false;
+		ignoreOffScreenTouch = false;
+        keyRepeat = true;
 	}
 	
 	void CoreInput::clearInput() {
@@ -58,6 +64,9 @@ namespace Polycode {
 	}
 	
 	JoystickInfo *CoreInput::getJoystickInfoByIndex(unsigned int index) {
+        if(index > joysticks.size()-1 || joysticks.size() == 0) {
+            return NULL;
+        }
 		return &joysticks[index];
 	}	
 	
@@ -163,10 +172,13 @@ namespace Polycode {
 			dispatchEvent(evt, InputEvent::EVENT_MOUSEUP);
 		mouseButtons[mouseButton] = state;
 				
-		if(simulateTouchWithMouse && mouseButton == MOUSE_BUTTON1) {
+		if(simulateTouchWithMouse) {
 			TouchInfo touch;
 			touch.position = mousePosition;
-			touch.id = 0;			
+			touch.id = 0;
+			if (simulateTouchAsPen){
+				touch.type = TouchInfo::TYPE_PEN;
+			}
 			std::vector<TouchInfo> touches;
 			touches.push_back(touch);
 			
@@ -194,15 +206,20 @@ namespace Polycode {
 		InputEvent *evt = new InputEvent(mousePosition, ticks);
 		dispatchEvent(evt, InputEvent::EVENT_MOUSEMOVE);
 		
-		if(simulateTouchWithMouse && mouseButtons[MOUSE_BUTTON1]) {
+		if(simulateTouchWithMouse) {
 			TouchInfo touch;
 			touch.position = mousePosition;
 			touch.id = 0;			
+			if (simulateTouchAsPen){
+				touch.type = TouchInfo::TYPE_PEN;
+			}
 			std::vector<TouchInfo> touches;
+
 			touches.push_back(touch);
-			
-			touchesMoved(touch, touches, ticks);
-		}		
+			if(mouseButtons[MOUSE_BUTTON1]) {
+                touchesMoved(touch, touches, ticks);
+            }
+		}
 	}
 	
 	Vector2 CoreInput::getMouseDelta() {
@@ -226,6 +243,13 @@ namespace Polycode {
 	}
 	
 	void CoreInput::setKeyState(PolyKEY keyCode, wchar_t code, bool newState, int ticks) {
+        
+        if(newState && !keyRepeat) {
+            if(keyboardState[keyCode]) {
+                return;
+            }
+        }
+        
 		InputEvent *evt = new InputEvent(keyCode, code, ticks);
 		if(keyCode < 512)
 			keyboardState[keyCode] = newState;
@@ -237,27 +261,62 @@ namespace Polycode {
 	}
 	
 	void CoreInput::touchesBegan(TouchInfo touch, std::vector<TouchInfo> touches, int ticks) {
+		if(ignoreOffScreenTouch) {
+			Core *core = CoreServices::getInstance()->getCore();
+			if(touch.position.x < 0 || touch.position.x > core->getXRes() || touch.position.y < 0 || touch.position.y > core->getYRes()) {
+				return;
+			}
+		}
 		InputEvent *evt = new InputEvent();
 		evt->touch = touch;		
 		evt->touches = touches;
 		evt->timestamp = ticks;
 		dispatchEvent(evt, InputEvent::EVENT_TOUCHES_BEGAN);
+		if(simulateMouseWithTouch) {
+			mousePosition = touch.position;
+			setMouseButtonState(MOUSE_BUTTON1, true, ticks);
+		}
 	}
 	
 	void CoreInput::touchesMoved(TouchInfo touch, std::vector<TouchInfo> touches, int ticks) {
+		if(ignoreOffScreenTouch) {
+			Core *core = CoreServices::getInstance()->getCore();
+			if(touch.position.x < 0 || touch.position.x > core->getXRes() || touch.position.y < 0 || touch.position.y > core->getYRes()) {
+				return;
+			}
+		}	
 		InputEvent *evt = new InputEvent();
 		evt->touch = touch;
 		evt->touches = touches;
 		evt->timestamp = ticks;		
-		dispatchEvent(evt, InputEvent::EVENT_TOUCHES_MOVED);	
+		dispatchEvent(evt, InputEvent::EVENT_TOUCHES_MOVED);
+		if(simulateMouseWithTouch) {
+			setMousePosition(touch.position.x, touch.position.y, ticks);
+		}
 	}
+
+
+
+
+
+
 	
 	void CoreInput::touchesEnded(TouchInfo touch, std::vector<TouchInfo> touches, int ticks) {
+		if(ignoreOffScreenTouch) {
+			Core *core = CoreServices::getInstance()->getCore();
+			if(touch.position.x < 0 || touch.position.x > core->getXRes() || touch.position.y < 0 || touch.position.y > core->getYRes()) {
+				return;
+			}
+		}	
 		InputEvent *evt = new InputEvent();
 		evt->touch = touch;		
 		evt->touches = touches;
-		evt->timestamp = ticks;		
-		dispatchEvent(evt, InputEvent::EVENT_TOUCHES_ENDED);	
+		evt->timestamp = ticks;	
+		dispatchEvent(evt, InputEvent::EVENT_TOUCHES_ENDED);
+		if(simulateMouseWithTouch) {
+			mousePosition = touch.position;				
+			setMouseButtonState(MOUSE_BUTTON1, false, ticks);
+		}		
 	}
 	
 }

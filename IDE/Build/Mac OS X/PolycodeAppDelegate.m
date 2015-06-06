@@ -34,6 +34,9 @@ void PolycodeAppEventHandler::handleEvent(Event *evt) {
 	
 	eventHandler = new PolycodeAppEventHandler();
 	eventHandler->appDelegate = self;
+    
+    [[window windowController] setShouldCascadeWindows:NO];
+    [window setFrameAutosaveName:[window representedFilename]];
 	
 	app = new PolycodeIDEApp(polycodeView);
 	app->addEventListener(eventHandler, PolycodeIDEApp::EVENT_SHOW_MENU);
@@ -82,9 +85,9 @@ void PolycodeAppEventHandler::handleEvent(Event *evt) {
 
 - (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)theApplication
 {
+	app->saveConfigFile();
 	bool retVal = app->quitApp();
 	if(retVal) {
-		app->saveConfigFile();
 		app->core->Shutdown();
 		printf("STOPPING\n");
 	}
@@ -181,5 +184,22 @@ void PolycodeAppEventHandler::handleEvent(Event *evt) {
 -(IBAction) showSettings: (id) sender {
 	app->showSettings();
 }
+
+-(IBAction) createNewTab: (id) sender {
+	app->createNewTab();
+}
+
+-(IBAction) showNextTab: (id) sender {
+	app->showNextTab();
+}
+
+-(IBAction) showPreviousTab: (id) sender {
+	app->showPreviousTab();
+}
+
+-(IBAction) closeTab: (id) sender {
+	app->closeTab();
+}
+
 
 @end

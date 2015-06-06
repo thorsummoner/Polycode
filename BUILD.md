@@ -91,16 +91,12 @@ You will also need to manually build the "glext" and "wglext" projects.
 To generate and build Debug and Release builds with Unix Makefiles 
 perform the following steps in the Polycode directory from a terminal:
 
-    cd Dependencies
-    mkdir Build
-    cd Build
-    mkdir Debug
-    cd Debug
+    mkdir -p Dependencies/Build/Debug
+    cd Dependencies/Build/Debug
     cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug ../..
     make
-    cd ..
-    mkdir Release
-    cd Release
+    mkdir ../Release
+    cd ../Release
     cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release ../..
     make
     
@@ -112,7 +108,7 @@ The Polycode CMake build will look for dependencies installed as
 static libraries in the Release folder by the above
 dependency build step. It will not use system level versions
 of these libraries, even if you have them installed. The only exception to
-this is SDL for the Linux build, which you must manually install on
+this is SDL (1.2) for the Linux build, which you must manually install on
 the system level.
 
 If you want to build documentation, you must have Doxygen installed 
@@ -157,21 +153,18 @@ templates and examples that will build out of the box.
 To generate and build Debug and Release builds with Unix Makefiles 
 perform the following steps in the Polycode directory from a terminal:
 
-NOTE: You need to install SDL development libraries on your system
+NOTE: You need to install SDL 1.2 development libraries on your system
 before doing this as they are not automatically installed by the 
 Dependencies project above. You can get SDL from http://www.libsdl.org 
 or using the package manager of your distribution.
 
-    mkdir Build
-    cd Build
-    mkdir Debug
-    cd Debug
+    mkdir -p Build/Debug
+    cd Build/Debug
     cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug ../..
     make
     make install
-    cd ..
-    mkdir Release
-    cd Release
+    mkdir ../Release
+    cd ../Release
     cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release ../..
     make
     make install

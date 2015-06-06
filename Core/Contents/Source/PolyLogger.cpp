@@ -21,12 +21,19 @@
 */
 
 #include "PolyLogger.h"
+#ifdef _MSC_VER
+#include <windows.h>
+#endif
+#include "PolyLogger.h"
 #include <stdio.h>
 #include <stdarg.h>
 #include <string>
 #include <iostream>
+#include <time.h>
 
 using namespace Polycode;
+
+Logger* Logger::overrideInstance = NULL;
 
 LoggerEvent::LoggerEvent(String message) : Event() {
 	this->message = message;
@@ -38,11 +45,15 @@ LoggerEvent::~LoggerEvent() {
 
 
 Logger::Logger() : EventDispatcher() {
-
+	logToFile = false;
+    logFile = NULL;
 }
 
 Logger::~Logger() {
-
+    if(logFile) {
+        fclose(logFile);
+    }
+    overrideInstance = NULL;
 }
 
 void Logger::logBroadcast(String message) {
@@ -59,19 +70,36 @@ void Logger::log(const char *format, ...) {
 	va_start(args, format);
 	vfprintf(stderr, format, args);
 	va_end(args);
-
-#ifdef MSVC
-#ifdef _DEBUG
 	
+	if (Logger::getInstance()->getLogToFile()){
+		if (Logger::getInstance()->getLogFile()){
+			va_start(args, format);
+			vfprintf(Logger::getInstance()->getLogFile(), format, args);
+            fflush(Logger::getInstance()->getLogFile());
+			va_end(args);
+		} else {
+			time_t t = time(NULL);
+			char mbstr[100];
+			if (strftime(mbstr, sizeof(mbstr), "%y_%m_%d.log", localtime(&t))) {
+				Logger::getInstance()->setLogFile(fopen((const char*)mbstr, "w"));
+			} else {
+				Logger::getInstance()->setLogFile(fopen("poly.log", "w"));
+			}
+		}
+	}
+
+#ifdef _MSC_VER
+#ifdef _DEBUG
+
 	char buffer[4096];
 	va_start(args, format);
 	vsprintf(buffer, format, args);
 	va_end(args);
 
-	WCHAR wbuf[4096];
+	wchar_t wbuf[4096];
 	int i = 0;
 	while(buffer[i] != '\0') {
-		wbuf[i] = (WCHAR)buffer[i];
+		wbuf[i] = (wchar_t)buffer[i];
 		++i;
 	}
 	wbuf[i] = L'\0';
@@ -80,4 +108,39 @@ void Logger::log(const char *format, ...) {
 #endif
 #endif
 
+}
+
+void Logger::setLogToFile(bool val){
+	if (!logToFile && val){
+		time_t t = time(NULL);
+		char mbstr[100];
+		if (strftime(mbstr, sizeof(mbstr), "%y_%m_%d.log", localtime(&t))) {
+			logFile = fopen((const char*)mbstr, "w");
+		} else {
+			logFile = fopen("poly.log", "w");
+		}
+	}
+
+	logToFile = val;
+}
+
+void Logger::setLogFile(FILE *f){
+	logFile = f;
+}
+
+bool Logger::getLogToFile(){
+	return logToFile;
+}
+
+FILE *Logger::getLogFile(){
+	return logFile;
+}
+
+Logger *Logger::getInstance(){
+	if (overrideInstance) {
+		return overrideInstance;
+	}
+
+	overrideInstance = new Logger;
+	return overrideInstance;
 }

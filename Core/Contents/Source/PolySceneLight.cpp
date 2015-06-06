@@ -26,11 +26,12 @@
 #include "PolyCoreServices.h"
 #include "PolyMesh.h"
 #include "PolyRenderer.h"
+#include "PolyScenePrimitive.h"
 #include "PolyScene.h"
 
 using namespace Polycode;
 
-SceneLight::SceneLight(int type, Scene *parentScene, Number intensity, Number constantAttenuation, Number linearAttenuation, Number quadraticAttenuation) : SceneEntity() {
+SceneLight::SceneLight(int type, Scene *parentScene, Number intensity, Number constantAttenuation, Number linearAttenuation, Number quadraticAttenuation) : Entity() {
 	this->type = type;
 	this->intensity = intensity;
 	this->constantAttenuation = constantAttenuation;
@@ -40,11 +41,11 @@ SceneLight::SceneLight(int type, Scene *parentScene, Number intensity, Number co
 	spotlightCutoff = 40;
 	spotlightExponent = 10;
 		
+    shadowMapRes = 256;
 	this->depthWrite = false;
 	lightMesh = new Mesh(Mesh::QUAD_MESH);
 	lightMesh->createBox(0.1,0.1,0.1);
-	bBoxRadius = lightMesh->getRadius();
-	bBox = lightMesh->calculateBBox();
+	setLocalBoundingBox(lightMesh->calculateBBox());
 	shadowMapFOV = 60.0f;
 	zBufferTexture = NULL;
 	spotCamera = NULL;
@@ -53,27 +54,11 @@ SceneLight::SceneLight(int type, Scene *parentScene, Number intensity, Number co
 	lightColor.setColor(1.0f,1.0f,1.0f,1.0f);
 	setSpotlightProperties(40,0.1);
 	
-	/*
-	if(type == SceneLight::SPOT_LIGHT) {
-		lightShape = new ScenePrimitive(ScenePrimitive::TYPE_CONE, 3, 1.0, 8);
-		lightShape->Translate(0,0,-1.5);
-		lightShape->setPitch(90.0);
-		lightShape->setColor(1.0,1.0,0.0, 0.75);
-		lightShape->renderWireframe = true;
-		addChild(lightShape);		
-	} else {
-		lightShape = new ScenePrimitive(ScenePrimitive::TYPE_BOX, 0.5, 0.5, 0.5);
-		lightShape->setColor(1.0,1.0,0.0, 0.75);
-		lightShape->renderWireframe = true;
-		addChild(lightShape);		
-	}
-	lightShape->castShadows = false;
-	lightShape->visible = false;
-	*/
-	
-	lightShape = NULL;
-	
 	lightImportance = 0;
+}
+
+void SceneLight::setLightType(int lightType) {
+    this->type = lightType;
 }
 
 void SceneLight::setLightImportance(int newImportance) {
@@ -84,22 +69,22 @@ int SceneLight::getLightImportance() const {
 	return lightImportance;
 }
 
-
-void SceneLight::enableDebugDraw(bool val) {
-	if(lightShape) {
-		lightShape->visible = val;
-	}
-}
-
-void SceneLight::enableShadows(bool val, Number resolution) {
+void SceneLight::enableShadows(bool val, unsigned int resolution) {
 	if(val) {
-		if(!zBufferTexture) {
-			CoreServices::getInstance()->getRenderer()->createRenderTextures(NULL, &zBufferTexture, resolution, resolution, false);
-		}
+        if(zBufferTexture) {
+            CoreServices::getInstance()->getMaterialManager()->deleteTexture(zBufferTexture);
+        }
+        CoreServices::getInstance()->getRenderer()->createRenderTextures(NULL, &zBufferTexture, resolution, resolution, false);
 		if(!spotCamera) {
 			spotCamera = new Camera(parentScene);
-//			spotCamera->setPitch(-45.0f);
-			addEntity(spotCamera);	
+            /*
+            spotCamera->setProjectionMode(Camera::ORTHO_SIZE_MANUAL);
+            spotCamera->setOrthoSize(5.0, 5.0);
+             */
+            spotCamera->editorOnly = true;
+            spotCamera->setClippingPlanes(0.01, 100.0);
+//            spotCamera->setPitch(90.0);
+			addChild(spotCamera);	
 		}
 		shadowMapRes = resolution;
 		shadowsEnabled = true;
@@ -127,24 +112,74 @@ void SceneLight::setShadowMapFOV(Number fov) {
 	shadowMapFOV = fov;
 }
 
+Number SceneLight::getShadowMapFOV() const {
+    return shadowMapFOV;
+}
+
 SceneLight::~SceneLight() {
+    if(parentScene) {
+        parentScene->removeLight(this);
+    }
 	printf("Destroying scene light...\n");
 }
 
-void SceneLight::renderDepthMap(Scene *scene) {
-	CoreServices::getInstance()->getRenderer()->clearScreen();
-	CoreServices::getInstance()->getRenderer()->pushMatrix();
-	CoreServices::getInstance()->getRenderer()->loadIdentity();
+unsigned int SceneLight::getShadowMapResolution() const {
+    return shadowMapRes;
+}
 
-	CoreServices::getInstance()->getRenderer()->setViewportSizeAndFOV(shadowMapRes, shadowMapRes, shadowMapFOV);	
-	CoreServices::getInstance()->getRenderer()->bindFrameBufferTexture(zBufferTexture);	
+void SceneLight::renderDepthMap(Scene *scene) {
+    spotCamera->setFOV(shadowMapFOV);
+	Renderer* renderer = CoreServices::getInstance()->getRenderer();
+	renderer->pushMatrix();
+	renderer->loadIdentity();
+
+    Number vpW = renderer->getViewportWidth();
+    Number vpH = renderer->getViewportHeight();
+    
+	renderer->setViewportSize(shadowMapRes, shadowMapRes);
+	renderer->bindFrameBufferTexture(zBufferTexture);
 
 	scene->RenderDepthOnly(spotCamera);
 		
-	lightViewMatrix = CoreServices::getInstance()->getRenderer()->getModelviewMatrix() *  CoreServices::getInstance()->getRenderer()->getProjectionMatrix();
-	CoreServices::getInstance()->getRenderer()->unbindFramebuffers();
-	CoreServices::getInstance()->getRenderer()->popMatrix();
-	CoreServices::getInstance()->getRenderer()->setViewportSizeAndFOV(CoreServices::getInstance()->getCore()->getXRes(), CoreServices::getInstance()->getCore()->getYRes(), 45.0f);
+	lightViewMatrix = getConcatenatedMatrix().Inverse() *  renderer->getProjectionMatrix();
+	renderer->unbindFramebuffers();
+	renderer->popMatrix();
+	renderer->setViewportSize(vpW , vpH);
+}
+
+Entity *SceneLight::Clone(bool deepClone, bool ignoreEditorOnly) const {
+    SceneLight *newLight = new SceneLight(type, NULL, intensity, constantAttenuation, linearAttenuation, quadraticAttenuation);
+    applyClone(newLight, deepClone, ignoreEditorOnly);
+    return newLight;
+}
+
+void SceneLight::applyClone(Entity *clone, bool deepClone, bool ignoreEditorOnly) const {
+    Entity::applyClone(clone, deepClone, ignoreEditorOnly);
+    SceneLight *cloneLight = (SceneLight*) clone;
+    
+    cloneLight->setAttenuation(constantAttenuation, linearAttenuation, quadraticAttenuation);
+    cloneLight->setIntensity(intensity);
+    cloneLight->lightColor = lightColor;
+    cloneLight->specularLightColor = specularLightColor;
+    cloneLight->enableShadows(shadowsEnabled, shadowMapRes);
+    cloneLight->setShadowMapFOV(shadowMapFOV);
+    cloneLight->setSpotlightProperties(spotlightCutoff, spotlightExponent);
+    cloneLight->setLightType(type);
+}
+
+Scene *SceneLight::getParentScene() const {
+    return parentScene;
+}
+
+void SceneLight::setParentScene(Scene *scene) {
+    parentScene = scene;
+    if(spotCamera) {
+        spotCamera->setParentScene(scene);
+    }
+}
+
+Camera *SceneLight::getSpotlightCamera() {
+    return spotCamera;
 }
 
 const Matrix4& SceneLight::getLightViewMatrix() const {
@@ -160,14 +195,7 @@ Number SceneLight::getIntensity() const {
 }
 
 void SceneLight::Render() {
-/*
-	CoreServices::getInstance()->getRenderer()->setTexture(NULL);
-	CoreServices::getInstance()->getRenderer()->beginRenderOperation(lightMesh->getMeshType());
-	for(int i=0; i < lightMesh->getPolygonCount(); i++) {
-			CoreServices::getInstance()->getRenderer()->draw3DPolygon(lightMesh->getPolygon(i));
-	}
-	CoreServices::getInstance()->getRenderer()->endRenderOperation();	
-	*/
+    
 }
 
 int SceneLight::getType() const {

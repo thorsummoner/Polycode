@@ -23,15 +23,14 @@ THE SOFTWARE.
 #include "PolyCollisionSceneEntity.h"
 #include "PolyLogger.h"
 #include "PolyMesh.h"
-#include "PolyPolygon.h"
-#include "PolySceneEntity.h"
+#include "PolyEntity.h"
 #include "PolySceneMesh.h"
 #include "btBulletCollisionCommon.h"
 
 using namespace Polycode;
 
-CollisionSceneEntity::CollisionSceneEntity(SceneEntity *entity, int type, bool compoundChildren) {
-	sceneEntity = entity;
+CollisionEntity::CollisionEntity(Entity *entity, int type, bool compoundChildren) {
+	this->entity = entity;
 	shape = NULL;
 	
 	this->type = type;
@@ -49,7 +48,7 @@ CollisionSceneEntity::CollisionSceneEntity(SceneEntity *entity, int type, bool c
 		 btCompoundShape* compoundShape = new btCompoundShape();
 		 
 		 for(int i=0; i < entity->getNumChildren(); i++) {
-			SceneEntity *child = (SceneEntity*)entity->getChildAtIndex(i);
+			Entity *child = (Entity*)entity->getChildAtIndex(i);
 			btCollisionShape *childShape = createCollisionShape(child, child->collisionShapeType);
 			btTransform transform;
 			
@@ -84,73 +83,79 @@ CollisionSceneEntity::CollisionSceneEntity(SceneEntity *entity, int type, bool c
 //	}		
 }
 
-btCollisionShape *CollisionSceneEntity::createCollisionShape(SceneEntity *entity, int type) {
+btCollisionShape *CollisionEntity::createCollisionShape(Entity *entity, int type) {
 	
 	btCollisionShape *collisionShape = NULL;	
 	
-	Vector3 entityScale = entity->getScale();
-	Number largestScale = entityScale.x;
-	if(entityScale.y > largestScale)
-		largestScale = entityScale.y;
-	if(entityScale.z > largestScale)
-		largestScale = entityScale.z;
-
+    Vector3 scale = entity->getCompoundScale();
+    Vector3 bBox = entity->getLocalBoundingBox() * scale;
 	
+    Number largestSize = bBox.x;
+    if(bBox.y > largestSize) {
+        largestSize = bBox.y;
+    }
+    if(bBox.z > largestSize) {
+        largestSize = bBox.z;
+    }
+    
 	switch(type) {
 		case SHAPE_CAPSULE:
 		case CHARACTER_CONTROLLER:
-			collisionShape = new btCapsuleShape(entity->bBox.x/2.0f, entity->bBox.y/2.0f);			
+			collisionShape = new btCapsuleShape(bBox.x/2.0f, bBox.y/2.0f);
 		break;
 		case SHAPE_CONE: {
-			Number largest = entity->bBox.x;
-			if(entity->bBox.z > largest) {
-				largest = entity->bBox.z;
+			Number largest = bBox.x;
+			if(bBox.z > largest) {
+				largest = bBox.z;
 			}
-			collisionShape = new btConeShape(largest/2.0f, entity->bBox.y);					
+			collisionShape = new btConeShape(largest/2.0f, bBox.y);
 			}
 		break;
 		case SHAPE_CYLINDER:
 		{
-			collisionShape = new btCylinderShape(btVector3(entity->bBox.x/2.0, entity->bBox.y/2.0f,entity->bBox.z/2.0));
+			collisionShape = new btCylinderShape(btVector3(bBox.x/2.0, bBox.y/2.0f,bBox.z/2.0));
 		}
 		break;
 		case SHAPE_PLANE:
-			collisionShape = new btBoxShape(btVector3(entity->bBox.x/2.0f, 0.05,entity->bBox.z/2.0f));			
+			collisionShape = new btBoxShape(btVector3(bBox.x/2.0f, 0.05,bBox.z/2.0f));
 			break;
 		case SHAPE_BOX:
-			collisionShape = new btBoxShape(btVector3(entity->bBox.x/2.0f*entityScale.x, entity->bBox.y/2.0f*entityScale.y,entity->bBox.z/2.0f*entityScale.z));			
+			collisionShape = new btBoxShape(btVector3(bBox.x/2.0f, bBox.y/2.0f,bBox.z/2.0f));
 			break;
 		case SHAPE_SPHERE:
-			collisionShape = new btSphereShape(entity->bBox.x/2.0f*largestScale);
+			collisionShape = new btSphereShape(largestSize/2.0f);
 			break;
 		case SHAPE_MESH:
 		{
 			SceneMesh* sceneMesh = dynamic_cast<SceneMesh*>(entity);
 			if(sceneMesh != NULL) {
 				btConvexHullShape *hullShape = new btConvexHullShape();
-				for(int i=0; i < sceneMesh->getMesh()->getPolygonCount(); i++) {
-					Polygon *poly = sceneMesh->getMesh()->getPolygon(i);
-					for(int j=0; j < poly->getVertexCount(); j++) {					
-						hullShape->addPoint(btVector3((btScalar)poly->getVertex(j)->x, (btScalar)poly->getVertex(j)->y,(btScalar)poly->getVertex(j)->z));
-					}
+                Mesh *mesh = sceneMesh->getMesh();
+				for(int i=0; i < mesh->vertexPositionArray.data.size()-2; i += 3) {
+                    
+                    hullShape->addPoint(btVector3((btScalar)mesh->vertexPositionArray.data[i], (btScalar)mesh->vertexPositionArray.data[i+1],mesh->vertexPositionArray.data[i+2]));
 				}				
 				collisionShape = hullShape;
 				
 			} else {
 				Logger::log("Tried to make a mesh collision object from a non-mesh\n");
-				collisionShape = new btBoxShape(btVector3(entity->bBox.x/2.0f, entity->bBox.y/2.0f,entity->bBox.z/2.0f));			
+				collisionShape = new btBoxShape(btVector3(bBox.x/2.0f, bBox.y/2.0f,bBox.z/2.0f));
 			}
 		}
 		break;
-	}	
+	}
+    
+    
+    //collisionShape->setLocalScaling(btVector3(scale.x, scale.y, scale.z));
+    
 	return collisionShape; 
 }
 
-void CollisionSceneEntity::Update() {	
-	sceneEntity->rebuildTransformMatrix();
+void CollisionEntity::Update() {	
+	entity->rebuildTransformMatrix();
 
 	btScalar mat[16];		
-	Matrix4 ent_mat = sceneEntity->getConcatenatedMatrix();
+	Matrix4 ent_mat = entity->getConcatenatedMatrix();
 	
 	for(int i=0; i < 16; i++) {
 			mat[i] = ent_mat.ml[i];
@@ -159,11 +164,11 @@ void CollisionSceneEntity::Update() {
 	collisionObject->getWorldTransform().setFromOpenGLMatrix(mat);
 }
 
-SceneEntity *CollisionSceneEntity::getSceneEntity() {
-	return sceneEntity;
+Entity *CollisionEntity::getEntity() {
+	return entity;
 }
 
-CollisionSceneEntity::~CollisionSceneEntity() {
+CollisionEntity::~CollisionEntity() {
 	delete shape;
 	delete collisionObject;
 }

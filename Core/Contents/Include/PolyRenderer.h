@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include "PolyShader.h"
 #include "PolyImage.h"
 #include "PolyRectangle.h"
+#include <stack>
 
 namespace Polycode {
 	
@@ -38,6 +39,7 @@ namespace Polycode {
 	class PolycodeShaderModule;
 	class Polygon;
 	class RenderDataArray;
+    class IndexDataArray;
 	class ShaderBinding;
 	class Texture;
 	class VertexBuffer;
@@ -64,12 +66,11 @@ namespace Polycode {
 	class _PolyExport LightSorter : public PolyBase {
 		public:
 			Vector3 basePosition;
-			Matrix4 cameraMatrix;
-			bool operator() (LightInfo i,LightInfo j) {
+			bool operator() (LightInfo i,LightInfo j) {                
 				if(i.lightImportance > j.lightImportance)
 					return true;
 				if(i.lightImportance == j.lightImportance)
-					return ((cameraMatrix*i.position).distance(basePosition)<(cameraMatrix*j.position).distance(basePosition));
+					return i.position.distance(basePosition) < j.position.distance(basePosition);
 				return false; 
 			}
 	};
@@ -82,8 +83,6 @@ namespace Polycode {
 	*
 	* The renderer should only be accessed from the CoreServices singleton. Renderer operations should only be called from within Render methods of entities so that they can be properly managed.
 	*
-	* @see http://www.glprogramming.com/red/
-	* @see http://nehe.gamedev.net/tutorial/lessons_01__05/22004/
 	*/
 	class _PolyExport Renderer : public PolyBase {
 	public:
@@ -94,8 +93,8 @@ namespace Polycode {
 
 		virtual void Resize(int xRes, int yRes) = 0;
 		
-		virtual void BeginRender() = 0;
-		virtual void EndRender() = 0;
+        virtual void BeginRender();
+        virtual void EndRender();
 		
 		virtual Cubemap *createCubemap(Texture *t0, Texture *t1, Texture *t2, Texture *t3, Texture *t4, Texture *t5) = 0;		
 		virtual Texture *createTexture(unsigned int width, unsigned int height, char *textureData, bool clamp, bool createMipmaps, int type=Image::IMAGE_RGBA) = 0;
@@ -103,21 +102,22 @@ namespace Polycode {
 		virtual void createRenderTextures(Texture **colorBuffer, Texture **depthBuffer, int width, int height, bool floatingPointBuffer) = 0;
 		
 		virtual Texture *createFramebufferTexture(unsigned int width, unsigned int height) = 0;
-		virtual void bindFrameBufferTexture(Texture *texture) = 0;
-		virtual void bindFrameBufferTextureDepth(Texture *texture) = 0;
-		virtual void unbindFramebuffers() = 0;
+		virtual void bindFrameBufferTexture(Texture *texture);
+		virtual void bindFrameBufferTextureDepth(Texture *texture);
+		virtual void unbindFramebuffers();
 
 		virtual Image *renderScreenToImage() = 0;
+		virtual Image *renderBufferToImage(Texture *texture) = 0;
 		
-		void setFOV(Number fov);		
 		void setViewportSize(int w, int h);
-		void setViewportSizeAndFOV(int w, int h, Number fov);
 		virtual void resetViewport() = 0;
+		
+		virtual Polycode::Rectangle getViewport() = 0;
 				
 		virtual void loadIdentity() = 0;		
-		virtual void setOrthoMode(Number xSize=0.0f, Number ySize=0.0f, bool centered = false) = 0;
-		virtual void _setOrthoMode(Number orthoSizeX, Number orthoSizeY) = 0;
-		virtual void setPerspectiveMode() = 0;
+		virtual void setProjectionOrtho(Number xSize=0.0f, Number ySize=0.0f, Number near=-256.0f, Number far=256.0f, bool centered = false) = 0;
+		virtual void setPerspectiveDefaults() = 0;
+        virtual void setProjectionMatrix(Matrix4 matrix) = 0;
 		
 		virtual void setTexture(Texture *texture) = 0;		
 		virtual void enableBackfaceCulling(bool val) = 0;
@@ -127,33 +127,30 @@ namespace Polycode {
 		
 		virtual void setAmbientColor(Number r, Number g, Number b);
 		
-		virtual void clearScreen() = 0;
+		virtual void clearScreen(bool clearColor = true, bool clearDepth = true) = 0;
 		
 		virtual void translate2D(Number x, Number y) = 0;
 		virtual void rotate2D(Number angle) = 0;
-		virtual void scale2D(Vector2 *scale) = 0;
+		virtual void scale2D(const Vector2 &scale) = 0;
 			
 		
 		virtual void setVertexColor(Number r, Number g, Number b, Number a) = 0;
-		
-		void pushDataArrayForMesh(Mesh *mesh, int arrayType);
-		
+				
 		virtual void pushRenderDataArray(RenderDataArray *array) = 0;
-		virtual RenderDataArray *createRenderDataArrayForMesh(Mesh *mesh, int arrayType) = 0;
-		virtual RenderDataArray *createRenderDataArray(int arrayType) = 0;
-		virtual void setRenderArrayData(RenderDataArray *array, Number *arrayData) = 0;
-		virtual void drawArrays(int drawType) = 0;
+		virtual void drawArrays(int drawType, IndexDataArray *indexArray) = 0;
 		
-		virtual void translate3D(Vector3 *position) = 0;
+		virtual void translate3D(const Vector3 &position) = 0;
 		virtual void translate3D(Number x, Number y, Number z) = 0;
-		virtual void scale3D(Vector3 *scale) = 0;
+		virtual void scale3D(const Vector3 &scale) = 0;
 		
 		virtual void pushMatrix() = 0;
 		virtual void popMatrix() = 0;
 		
 		virtual void setLineSmooth(bool val) = 0;
 		virtual void setLineSize(Number lineSize) = 0;
-		
+		virtual void setPointSize(Number pointSize) = 0;
+		virtual void setPointSmooth(bool val) = 0;
+				
 		virtual void enableLighting(bool enable) = 0;
 			
 		virtual void enableFog(bool enable) = 0;
@@ -161,13 +158,10 @@ namespace Polycode {
 				
 		virtual void multModelviewMatrix(Matrix4 m) = 0;
 		virtual void setModelviewMatrix(Matrix4 m) = 0;
-		
-		void setCurrentModelMatrix(Matrix4 m) { currentModelMatrix = m; }
-		Matrix4 getCurrentModelMatrix() { return currentModelMatrix; }
-		
+				
 		virtual void setBlendingMode(int blendingMode) = 0;	
 			
-		virtual void applyMaterial(Material *material, ShaderBinding *localOptions, unsigned int shaderIndex) = 0;
+		virtual void applyMaterial(Material *material, ShaderBinding *localOptions, unsigned int shaderIndex, bool forceMaterial);
 		virtual void clearShader() = 0;
 		
 		virtual void setDepthFunction(int depthFunction) = 0;
@@ -175,31 +169,28 @@ namespace Polycode {
 		virtual void createVertexBufferForMesh(Mesh *mesh) = 0;
 		virtual void drawVertexBuffer(VertexBuffer *buffer, bool enableColorBuffer) = 0;
 		
-		void setRenderMode(int newRenderMode);
-		int getRenderMode();
-		
 		virtual void enableDepthTest(bool val) = 0;
 		virtual void enableDepthWrite(bool val) = 0;
+        virtual void setWireframePolygonMode(bool val) = 0;
 		
 		void billboardMatrix();
 		void billboardMatrixWithScale(Vector3 scale);
 		
 		void setTextureFilteringMode(int mode);
-		
+
 		/**
-		 * Set the near and far clipping planes for the visible frustum.
+		 * Set the frustum clipping planes.
 		 *
 		 * Please check the supplied external links for more information
 		 * about the problems of a high farPlane/nearPlane setting.
 		 *
-		 * @param nearPlane The new near clipping plane.
-		 * @param farPlane The new far clipping plane.
-		 *
-		 * @see http://en.wikipedia.org/wiki/Viewing_frustum
 		 * @see http://www.opengl.org/sdk/docs/man2/xhtml/glFrustum.xml
 		 */
-		virtual void setClippingPlanes(Number nearPlane, Number farPlane) = 0;
-		
+		virtual void setProjectionFromFrustum(Number left, Number right, Number bottom, Number top, Number front, Number back) = 0;
+
+
+		virtual void setProjectionFromFoV(Number fov, Number near, Number far) = 0;
+
 		/**
 		 * Enable/disable alpha tests.
 		 *
@@ -217,7 +208,6 @@ namespace Polycode {
 		
 		const Matrix4& getCameraMatrix() const;
 		void setCameraMatrix(const Matrix4& matrix);
-		void setCameraPosition(Vector3 pos);
 		
 		virtual void drawScreenQuad(Number qx, Number qy) = 0;
 		
@@ -237,13 +227,13 @@ namespace Polycode {
 		virtual void cullFrontFaces(bool val) = 0;
 		
 		void clearLights();
-		void addLight(int lightImportance, Vector3 position, Vector3 direction, int type, Color color, Color specularColor, Number constantAttenuation, Number linearAttenuation, Number quadraticAttenuation, Number intensity, Number spotlightCutoff, Number spotlightExponent, bool shadowsEnabled, Matrix4 *textureMatrix, Texture *shadowMapTexture);
+		void addLight(int lightImportance, const Vector3 &position, const Vector3 &direction, int type, const Color &color, const Color &specularColor, Number constantAttenuation, Number linearAttenuation, Number quadraticAttenuation, Number intensity, Number spotlightCutoff, Number spotlightExponent, bool shadowsEnabled, Matrix4 *textureMatrix, Texture *shadowMapTexture);
 		
 		void setExposureLevel(Number level);
 		
-		bool rayTriangleIntersect(Vector3 ray_origin, Vector3 ray_direction, Vector3 vert0, Vector3 vert1, Vector3 vert2, Vector3 *hitPoint);
+		virtual Vector3 projectRayFrom2DCoordinate(Number x, Number y, const Matrix4 &cameraMatrix, const Matrix4 &projectionMatrix, const Polycode::Rectangle &viewport) = 0;
 		
-		virtual Vector3 projectRayFrom2DCoordinate(Number x, Number y, Matrix4 cameraMatrix, Matrix4 projectionMatrix) = 0;
+		virtual Vector2 Project(const Matrix4 &cameraMatrix, const Matrix4 &projectionMatrix, const Polycode::Rectangle &viewport, const Vector3 &coordiante) const = 0;
 		
 		void enableShaders(bool flag);
 		
@@ -256,20 +246,16 @@ namespace Polycode {
 		void setRendererShaderParams(Shader *shader, ShaderBinding *binding);
 		
 		void addShaderModule(PolycodeShaderModule *module);
-		
-		virtual bool test2DCoordinateInPolygon(Number x, Number y, Matrix4 cameraMatrix, Matrix4 projectionMatrix, Polygon *poly, const Matrix4 &matrix, bool ortho, bool testBackfacing, bool billboardMode, bool reverseDirection = false, Matrix4 *adjustMatrix = NULL);
-		
+				
 		virtual Matrix4 getProjectionMatrix() = 0;
 		virtual Matrix4 getModelviewMatrix() = 0;
-		
-		static const int RENDER_MODE_NORMAL = 0;
-		static const int RENDER_MODE_WIREFRAME = 1;
-		
-		static const int BLEND_MODE_NORMAL = 0;
-		static const int BLEND_MODE_LIGHTEN = 1;
-		static const int BLEND_MODE_COLOR = 2;
-		static const int BLEND_MODE_PREMULTIPLIED = 3;
-		static const int BLEND_MODE_MULTIPLY = 4;
+
+        static const int BLEND_MODE_NONE = 0;
+		static const int BLEND_MODE_NORMAL = 1;
+		static const int BLEND_MODE_LIGHTEN = 2;
+		static const int BLEND_MODE_COLOR = 3;
+		static const int BLEND_MODE_PREMULTIPLIED = 4;
+		static const int BLEND_MODE_MULTIPLY = 5;
 								
 		static const int FOG_LINEAR = 0;
 		static const int FOG_EXP = 1;
@@ -281,10 +267,8 @@ namespace Polycode {
 		static const int TEX_FILTERING_NEAREST = 0;
 		static const int TEX_FILTERING_LINEAR = 1;
 		
-//		void addShadowMap(Texture *texture);
-//		vector<Texture*> getShadowMapTextures(){ return shadowMapTextures; };
 		
-		virtual Vector3 Unproject(Number x, Number y) = 0;
+		virtual Vector3 Unproject(Number x, Number y, const Matrix4 &cameraMatrix, const Matrix4 &projectionMatrix, const Polycode::Rectangle &viewport) = 0;
 		
 		Color	ambientColor;
 		Color	clearColor;		
@@ -293,26 +277,53 @@ namespace Polycode {
 		
 		void sortLights();
 		
-		int getNumAreaLights() { return numAreaLights; }
+		int getNumPointLights() { return numPointLights; }
 		int getNumSpotLights() { return numSpotLights; }
 		int getNumLights() { return numLights; }
 		
-		std::vector<LightInfo> getAreaLights() { return areaLights; }
+		std::vector<LightInfo> getPointLights() { return pointLights; }
 		std::vector<LightInfo> getSpotLights() { return spotLights;	}
 		
 		bool doClearBuffer;
 		
 		bool blendNormalAsPremultiplied;
-				
+		Number alphaTestValue;
+        
+        void setBackingResolutionScale(Number xScale, Number yScale);
+        
+        Number getBackingResolutionScaleX();
+        Number getBackingResolutionScaleY();
+        
+        void setOverrideMaterial(Material *material);
+        
+        void pushVertexColor();
+        void popVertexColor();
+        void loadVertexColorIdentity();
+        void multiplyVertexColor(const Color &color);
+        
+        void setRenderToGlobalFramebuffer(bool val);
+        bool getRenderToGlobalFramebuffer() const;
+        
+        Texture *getGlobalColorFramebuffer() const;
+        Texture *getGlobalDepthFramebuffer() const;
+        
 	protected:
 		virtual void initOSSpecific() {};
-	
+        
+        Number backingResolutionScaleX;
+        Number backingResolutionScaleY;
+        
+        std::stack<Color> vertexColorStack;
+        Color currentVertexColor;
+        
+        std::stack<Texture*> framebufferStackColor;
+        std::stack<Texture*> framebufferStackDepth;
+        
 		bool scissorEnabled;
 		
 		Polycode::Rectangle scissorBox;
 	
 		Number anisotropy;
-		Matrix4 currentModelMatrix;
 		LightSorter sorter;	
 	
 		Number viewportWidth;
@@ -326,29 +337,28 @@ namespace Polycode {
 		Material *currentMaterial;
 		
 		int textureFilteringMode;
-		int renderMode;
 		
 		Matrix4 cameraMatrix;
-	
+        Material *overrideMaterial;
+        
 		PolycodeShaderModule* currentShaderModule;
 		std::vector <PolycodeShaderModule*> shaderModules;
+        
+        bool renderToGlobalFramebuffer;
+        Texture *globalColorFramebuffer;
+        Texture *globalDepthFramebuffer;
 
 		std::vector<LightInfo> lights;
-		std::vector<LightInfo> areaLights;
+		std::vector<LightInfo> pointLights;
 		std::vector<LightInfo> spotLights;
 		int numLights;
-		int numAreaLights;
+		int numPointLights;
 		int numSpotLights;
 		
 		bool shadersEnabled;
 		Number fov;
-		
-		Number orthoSizeX;
-		Number orthoSizeY;
 				
 		bool lightingEnabled;
-		
-		bool orthoMode;
 	
 		int xRes;
 		int yRes;

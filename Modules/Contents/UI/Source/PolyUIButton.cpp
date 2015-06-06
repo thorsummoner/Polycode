@@ -27,6 +27,7 @@
 #include "PolyLabel.h"
 #include "PolyCoreServices.h"
 #include "PolyCore.h"
+#include "PolyRenderer.h"
 
 using namespace Polycode;
 
@@ -70,31 +71,36 @@ UIButton::UIButton(String text, Number width, Number height) : UIElement() {
 		
 	pressedDown = false;
 	
-	buttonLabel = new ScreenLabel(text, fontSize, fontName, Label::ANTIALIAS_FULL);
+	buttonLabel = new SceneLabel(text, fontSize, fontName, Label::ANTIALIAS_FULL);
+    buttonLabel->setBlendingMode(Renderer::BLEND_MODE_NORMAL);
 	buttonLabel->color.setColorHexFromString(conf->getStringValue("Polycode", "uiButtonFontColor"));
 	addChild(buttonLabel);
 	labelXPos = floor((width-buttonLabel->getWidth())/2.0f) + labelOffsetX;
 	labelYPos = labelOffsetY;
 	buttonLabel->setPosition(labelXPos,labelYPos);
-	
-	this->width = width;
-	this->height = height;
+	buttonLabel->positionAtBaseline = true;
+	buttonLabel->setAnchorPoint(-1.0, -1.0, 0.0);
+	setWidth(width);
+	setHeight(height);
 	focusable = true;
 	
 	buttonRect->processInputEvents = true;
 	
 }
 
+void UIButton::setCaption(String caption) {
+    buttonLabel->setText(caption);
+    Resize(getWidth(), getHeight());
+}
+
 void UIButton::Resize(Number width, Number height) {
 	buttonRect->resizeBox(width, height);
 	buttonFocusedRect->resizeBox(width, height);
-	this->width = width;
-	this->height = height;	
+	setWidth(width);
+	setHeight(height);
 	matrixDirty = true;	
-	setHitbox(width,height);	
 	
 	labelXPos = floor((width-buttonLabel->getWidth())/2.0f) + labelOffsetX;
-	labelYPos = labelOffsetY;
 	buttonLabel->setPosition(labelXPos,labelYPos);
 	
 	UIElement::Resize(width, height);
@@ -156,8 +162,8 @@ void UIButton::handleEvent(Event *event) {
 			break;
 			case InputEvent::EVENT_MOUSEDOWN:
 				pressedDown = true;
-				if(parentEntity)
-					((ScreenEntity*)parentEntity)->focusChild(this);
+				if(focusParent)
+					focusParent->focusChild(this);
 				buttonLabel->setPosition(labelXPos+1,labelYPos+1);
 				buttonRect->setPosition(1,1);
 			break;

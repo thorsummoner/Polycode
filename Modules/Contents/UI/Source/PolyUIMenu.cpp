@@ -27,7 +27,8 @@
 #include "PolyCoreServices.h"
 #include "PolyCore.h"
 #include "PolyConfig.h"
-#include "PolyScreenLine.h"
+#include "PolySceneLine.h"
+#include "PolyRenderer.h"
 
 using namespace Polycode;
 
@@ -42,12 +43,17 @@ UIMenuItem::UIMenuItem(String label, String _id, void *data, Number comboWidth, 
 	Number paddingX = conf->getNumericValue("Polycode", "uiMenuTextOffsetX");	
 	Number paddingY = conf->getNumericValue("Polycode", "uiMenuTextOffsetY");	
 
-	itemLabel = new ScreenLabel(label, fontSize, fontName);
+	itemLabel = new SceneLabel(label, fontSize, fontName);
+    itemLabel->setBlendingMode(Renderer::BLEND_MODE_NORMAL);
 	itemLabel->setPosition(paddingX, floor(((comboHeight/2.0) - itemLabel->getHeight()/2.0) + paddingY));
 	addChild(itemLabel);
-	
+	itemLabel->color.setColorHexFromString(conf->getStringValue("Polycode", "uiDefaultFontColor"));
 	this->_id = _id;
 	this->data = data;
+}
+
+String UIMenuItem::getMenuItemID() {
+    return _id;
 }
 
 UIMenuItem::UIMenuItem() : UIElement(), data(NULL), itemLabel(NULL) {
@@ -67,8 +73,9 @@ UIMenuDivider::UIMenuDivider(Number comboWidth, Number comboHeight) : UIMenuItem
 	Config *conf    = CoreServices::getInstance()->getConfig();
 	Number paddingX = conf->getNumericValue("Polycode", "uiMenuSelectorPadding");
 
-	line = new ScreenLine(Vector2(paddingX, comboHeight/2.0), Vector2(comboWidth-paddingX, comboHeight/2.0));
-	line->setLineWidth(1.0);
+	line = new SceneLine(Vector3(paddingX, comboHeight/2.0, 0.0), Vector3(comboWidth-paddingX, comboHeight/2.0, 0.0));
+	
+//	line->setLineWidth(1.0);
 	line->setColor(Color(0.0, 0.0, 0.0, 0.7));
 	addChild(line);
 }
@@ -134,8 +141,8 @@ UIMenu::UIMenu(Number menuWidth) : UIElement() {
 
 	initialMouse = CoreServices::getInstance()->getCore()->getInput()->getMousePosition();
 	
-	this->width = menuWidth;
-	this->height = menuItemHeight;
+	setWidth(menuWidth);
+	setHeight(menuItemHeight);
 	
 	// ugh, hackz
 	ignoreMouse = true;
@@ -167,7 +174,7 @@ void UIMenu::fitToScreenVertical() {
 	// Make sure the entity doesn't go past the bottom of the screen.
 	if(dropDownBox->getHeight() < CoreServices::getInstance()->getCore()->getYRes()) {
 		// If the entity is as high as the screen, no point trying to fit it in vertically.
-		Vector2 screenPos = this->getScreenPosition();
+		Vector2 screenPos = this->getScreenPositionForMainCamera();
 		Number exceedScreenBottom = screenPos.y + dropDownBox->getHeight() - CoreServices::getInstance()->getCore()->getYRes();
 		if(exceedScreenBottom > 0) {
 			this->setPosition(this->getPosition().x, this->getPosition().y - exceedScreenBottom);
@@ -192,7 +199,7 @@ void UIMenu::handleEvent(Event *event) {
 		if((event->getEventCode() == InputEvent::EVENT_MOUSEDOWN || (event->getEventCode() == InputEvent::EVENT_MOUSEUP && initialMouse != inputEvent->getMousePosition())) && !ignoreMouse) {
 			if(selectorBox->visible) {
 				dispatchEvent(new UIEvent(), UIEvent::OK_EVENT);
-			} else if(!dropDownBox->hitTest(inputEvent->getMousePosition())) {
+			} else {
 				dispatchEvent(new UIEvent(), UIEvent::CANCEL_EVENT);
 			}
 		}
@@ -240,6 +247,16 @@ UIMenuItem *UIMenu::addOption(String label, String _id, void *data) {
 	newItem->setPosition(0,paddingY+nextItemHeight);
 	nextItemHeight += menuItemHeight;
 	dropDownBox->resizeBox(menuWidth, nextItemHeight + (paddingY * 2.0));
+    
+    Number difference = CoreServices::getInstance()->getCore()->getYRes() - (getPosition().y + dropDownBox->getHeight());
+    if(difference < 0) {
+        setPositionY(getPosition().y + difference);
+    }
+    difference = CoreServices::getInstance()->getCore()->getXRes() - (getPosition().x + dropDownBox->getWidth());
+    if(difference < 0) {
+        setPositionX(getPosition().x + difference);
+    }
+    
 	return newItem;
 }
 
@@ -259,7 +276,7 @@ void UIMenu::Resize(Number width, Number height) {
 	UIElement::Resize(width, height);
 }
 
-UIGlobalMenu::UIGlobalMenu() : ScreenEntity() {
+UIGlobalMenu::UIGlobalMenu() : Entity() {
 	currentMenu = NULL;
 	processInputEvents = true;
 	willHideMenu = false;

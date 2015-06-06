@@ -60,6 +60,7 @@ namespace Polycode {
 		input = new CoreInput();
 		services->setCore(this);
 		fps = 0;
+        timeLeftOver = 0.0;
 		running = true;
 		frames = 0;
 		lastFrameTicks=0;
@@ -80,12 +81,26 @@ namespace Polycode {
 		if(frameRate == 0)
 			frameRate = 60;
 		
-		refreshInterval = 1000 / frameRate;		
+		setFramerate(frameRate);
 		threadedEventMutex = NULL;
 	}
+    
+    int Core::getScreenWidth() {
+        int width, height, hz;
+        getScreenInfo(&width, &height, &hz);
+        return width;
+    }
+    
+    int Core::getScreenHeight() {
+        int width, height, hz;
+        getScreenInfo(&width, &height, &hz);
+        return height;
+    }
 	
-	void Core::setFramerate(int frameRate) {
+	void Core::setFramerate(int frameRate, int maxFixedCycles) {
 		refreshInterval = 1000 / frameRate;
+        fixedTimestep = 1.0 / ((double) frameRate);
+        maxFixedElapsed = fixedTimestep * maxFixedCycles;
 	}
 	
 	void Core::enableMouse(bool newval) {
@@ -111,6 +126,7 @@ namespace Polycode {
 	Core::~Core() {
 		printf("Shutting down core");
 		delete services;
+        delete input;
 	}
 	
 	void Core::Shutdown() {	
@@ -129,8 +145,8 @@ namespace Polycode {
 		return ((Number)elapsed)/1000.0f;
 	}
 	
-	Number Core::getTicksFloat() {
-		return ((Number)getTicks())/1000.0f;		
+	double Core::getTicksFloat() {
+		return getTicks()/1000.0;
 	}
 		
 	void Core::createThread(Threaded *target) {
@@ -184,15 +200,46 @@ namespace Polycode {
 		Render();
 		return ret;
 	}
+    
+    bool Core::fixedUpdate() {
+        if(fixedElapsed < fixedTimestep) {
+            return false;
+        }
+        services->fixedUpdate();
+        fixedElapsed -= fixedTimestep;
+        return true;
+    }
+    
+    Number Core::getFixedTimestep() {
+        return fixedTimestep;
+    }
+    
+    bool Core::Update() {
+        bool ret = systemUpdate();
+        while(fixedUpdate()) {}
+        return ret;
+    }
 							
 	void Core::updateCore() {
 		frames++;
 		frameTicks = getTicks();
 		elapsed = frameTicks - lastFrameTicks;
-		
+		      
 		if(elapsed > 1000)
 			elapsed = 1000;
-			
+
+		if(fixedElapsed > 0) {
+            timeLeftOver = fixedElapsed;
+        } else {
+            timeLeftOver = 0;
+        }
+        
+        fixedElapsed = (((Number)elapsed)/1000.0f) + timeLeftOver;
+        
+        if(fixedElapsed > maxFixedElapsed) {
+            fixedElapsed = maxFixedElapsed;
+        }
+        
 		services->Update(elapsed);
 		
 		if(frameTicks-lastFPSTicks >= 1000) {
@@ -228,13 +275,16 @@ namespace Polycode {
 	void Core::doSleep() {
 		unsigned int ticks = getTicks();
 		unsigned int ticksSinceLastFrame = ticks - lastSleepFrameTicks;
-		if(ticksSinceLastFrame <= refreshInterval)
+		int sleepTimeMs = refreshInterval - ticksSinceLastFrame;
+		if(sleepTimeMs > 0) {
 #ifdef _WINDOWS
-		Sleep((refreshInterval - ticksSinceLastFrame));
+			Sleep(sleepTimeMs);
 #else
-			usleep((refreshInterval - ticksSinceLastFrame) * 1000);
+			usleep(sleepTimeMs * 1000);
 #endif
+		}
 		lastSleepFrameTicks = getTicks();
+		timeSleptMs = lastSleepFrameTicks - ticks;
 	}
 	
 	

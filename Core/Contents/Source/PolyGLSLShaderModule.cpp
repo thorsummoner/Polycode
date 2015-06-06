@@ -112,15 +112,15 @@ String GLSLShaderModule::getShaderType() {
 	return "glsl";
 }
 
-Shader *GLSLShaderModule::createShader(String name, String vpName, String fpName) {
+Shader *GLSLShaderModule::createShader(ResourcePool *resourcePool, String name, String vpName, String fpName) {
 
 	GLSLShader *retShader = NULL;
 
 	GLSLProgram *vp = NULL;
 	GLSLProgram *fp = NULL;
 
-	vp = (GLSLProgram*)CoreServices::getInstance()->getResourceManager()->getResourceByPath(vpName);
-	fp = (GLSLProgram*)CoreServices::getInstance()->getResourceManager()->getResourceByPath(fpName);
+	vp = (GLSLProgram*)resourcePool->getResourceByPath(vpName);
+	fp = (GLSLProgram*)resourcePool->getResourceByPath(fpName);
 		
 	if(vp != NULL && fp != NULL) {
 		GLSLShader *shader = new GLSLShader(vp,fp);
@@ -131,7 +131,7 @@ Shader *GLSLShaderModule::createShader(String name, String vpName, String fpName
 	return retShader;
 }
 
-Shader *GLSLShaderModule::createShader(TiXmlNode *node) {
+Shader *GLSLShaderModule::createShader(ResourcePool *resourcePool, TiXmlNode *node) {
 	TiXmlNode* pChild;
 	GLSLProgram *vp = NULL;
 	GLSLProgram *fp = NULL;
@@ -146,27 +146,27 @@ Shader *GLSLShaderModule::createShader(TiXmlNode *node) {
 		
 		if(strcmp(pChild->Value(), "vp") == 0) {
 			String vpFileName = String(pChildElement->Attribute("source"));
-			vp = (GLSLProgram*)CoreServices::getInstance()->getResourceManager()->getResourceByPath(vpFileName);
+			vp = (GLSLProgram*)resourcePool->getResourceByPath(vpFileName);
 			if(!vp) {
 				vp = (GLSLProgram*)CoreServices::getInstance()->getMaterialManager()->createProgramFromFile(vpFileName);
 				if(vp) {
 					vp->setResourcePath(vpFileName);
 					OSFileEntry entry = OSFileEntry(vpFileName, OSFileEntry::TYPE_FILE);
 					vp->setResourceName(entry.name);
-					CoreServices::getInstance()->getResourceManager()->addResource(vp);
+					resourcePool->addResource(vp);
 				}
 			}
 		}
 		if(strcmp(pChild->Value(), "fp") == 0) {
 			String fpFileName = String(pChildElement->Attribute("source"));		
-			fp = (GLSLProgram*)CoreServices::getInstance()->getResourceManager()->getResourceByPath(fpFileName);
+			fp = (GLSLProgram*)resourcePool->getResourceByPath(fpFileName);
 			if(!fp) {
 				fp = (GLSLProgram*)CoreServices::getInstance()->getMaterialManager()->createProgramFromFile(fpFileName);
 				if(fp) {
 					fp->setResourcePath(fpFileName);
 					OSFileEntry entry = OSFileEntry(fpFileName, OSFileEntry::TYPE_FILE);					
 					fp->setResourceName(entry.name);
-					CoreServices::getInstance()->getResourceManager()->addResource(fp);				
+					resourcePool->addResource(fp);				
 				}
 			}			
 		}
@@ -184,6 +184,19 @@ Shader *GLSLShaderModule::createShader(TiXmlNode *node) {
 
 void GLSLShaderModule::clearShader() {
 	glUseProgram(0);
+}
+
+void setUniformMatrix(GLint paramLocation, const Polycode::Matrix4& matrix) {
+#ifdef POLYCODE_NUMBER_IS_SINGLE
+	glUniformMatrix4fv(paramLocation, 1, false, matrix.ml);
+#else
+	// no glUniformMatrix4dv on some systems
+	float copyMatrix[16];
+	for(int i=0; i < 16; i++) {
+		copyMatrix[i] = matrix.ml[i];
+	}
+	glUniformMatrix4fv(paramLocation, 1, false, copyMatrix);
+#endif
 }
 
 void GLSLShaderModule::updateGLSLParam(Renderer *renderer, GLSLShader *glslShader, ProgramParam &param, ShaderBinding *materialOptions, ShaderBinding *localOptions) {
@@ -230,7 +243,28 @@ void GLSLShaderModule::updateGLSLParam(Renderer *renderer, GLSLShader *glslShade
 				} else {
 					glUniform4f(paramLocation, 0.0f, 0.0f, 0.0f, 0.0f);
 				}
-			break;				
+			break;
+			case ProgramParam::PARAM_MATRIX:
+				if(localParam) {
+                    if(localParam->arraySize > 0) {
+                        Matrix4 *matPointer = (Matrix4*)localParam->data;
+                        std::vector<float> matrixData;
+                        for(int i=0; i < localParam->arraySize; i++) {
+                            for(int j=0; j < 16; j++) {
+                                matrixData.push_back(matPointer[i].ml[j]);
+                            }
+                        }
+                        
+                        glUniformMatrix4fv(paramLocation, localParam->arraySize, false, &matrixData[0]);
+                    
+                    } else {
+                        setUniformMatrix(paramLocation, localParam->getMatrix4());
+                    }
+                } else {
+					Matrix4 defaultMatrix;
+					setUniformMatrix(paramLocation, defaultMatrix);
+				}
+			break;
 		}
 }
 
@@ -240,17 +274,12 @@ bool GLSLShaderModule::applyShaderMaterial(Renderer *renderer, Material *materia
 
 	glPushMatrix();
 	glLoadIdentity();
-	
-	
-	int numRendererAreaLights = renderer->getNumAreaLights();
+		
+	int numRendererPointLights = renderer->getNumPointLights();
 	int numRendererSpotLights = renderer->getNumSpotLights();
 	
-	int numTotalLights = glslShader->numAreaLights + glslShader->numSpotLights;
-	
-	if(numTotalLights > 0) {
-		renderer->sortLights();	
-	}
-	
+	int numTotalLights = glslShader->numPointLights + glslShader->numSpotLights;
+		
 	for(int i=0 ; i < numTotalLights; i++) {
 		GLfloat resetData[] = {0.0, 0.0, 0.0, 0.0};				
 		glLightfv (GL_LIGHT0+i, GL_DIFFUSE, resetData);	
@@ -265,44 +294,43 @@ bool GLSLShaderModule::applyShaderMaterial(Renderer *renderer, Material *materia
 	
 	int lightIndex = 0;
 	
-	vector<LightInfo> areaLights = renderer->getAreaLights();
+	vector<LightInfo> pointLights = renderer->getPointLights();
 		
 	GLfloat ambientVal[] = {1, 1, 1, 1.0};				
-	for(int i=0; i < glslShader->numAreaLights; i++) {
+	for(int i=0; i < glslShader->numPointLights; i++) {
 		LightInfo light;
-		if(i < numRendererAreaLights) {
-			light = areaLights[i];
+		if(i < numRendererPointLights) {
+			light = pointLights[i];
 			light.position = renderer->getCameraMatrix().Inverse() * light.position;
 			ambientVal[0] = renderer->ambientColor.r;
 			ambientVal[1] = renderer->ambientColor.g;
 			ambientVal[2] = renderer->ambientColor.b;										
-			ambientVal[3] = 1;
-		
-		GLfloat data4[] = {light.color.x * light.intensity, light.color.y * light.intensity, light.color.z * light.intensity, 1.0};					
-		glLightfv (GL_LIGHT0+lightIndex, GL_DIFFUSE, data4);
-		
-		data4[0] = light.specularColor.r* light.intensity;
-		data4[1] = light.specularColor.g* light.intensity;
-		data4[2] = light.specularColor.b* light.intensity;
-		data4[3] = light.specularColor.a* light.intensity;
-		glLightfv (GL_LIGHT0+lightIndex, GL_SPECULAR, data4);				
-			
-		data4[3] = 1.0;
-			
-		glLightfv (GL_LIGHT0+lightIndex, GL_AMBIENT, ambientVal);		
-		glLightf (GL_LIGHT0+lightIndex, GL_SPOT_CUTOFF, 180);
+            ambientVal[3] = 1;
+            
+            GLfloat data4[] = {light.color.x * light.intensity, light.color.y * light.intensity, light.color.z * light.intensity, 1.0};
+            glLightfv (GL_LIGHT0+lightIndex, GL_DIFFUSE, data4);
+            
+            data4[0] = light.specularColor.r* light.intensity;
+            data4[1] = light.specularColor.g* light.intensity;
+            data4[2] = light.specularColor.b* light.intensity;
+            data4[3] = light.specularColor.a* light.intensity;
+            glLightfv (GL_LIGHT0+lightIndex, GL_SPECULAR, data4);				
+                
+            data4[3] = 1.0;
+                
+            glLightfv (GL_LIGHT0+lightIndex, GL_AMBIENT, ambientVal);		
+            glLightf (GL_LIGHT0+lightIndex, GL_SPOT_CUTOFF, 180);
 
-		data4[0] = light.position.x;
-		data4[1] = light.position.y;
-		data4[2] = light.position.z;
-		glLightfv (GL_LIGHT0+lightIndex, GL_POSITION, data4);		
+            data4[0] = light.position.x;
+            data4[1] = light.position.y;
+            data4[2] = light.position.z;
+            glLightfv (GL_LIGHT0+lightIndex, GL_POSITION, data4);		
 
-		glLightf (GL_LIGHT0+lightIndex, GL_CONSTANT_ATTENUATION, light.constantAttenuation);		
-		glLightf (GL_LIGHT0+lightIndex, GL_LINEAR_ATTENUATION, light.linearAttenuation);				
-		glLightf (GL_LIGHT0+lightIndex, GL_QUADRATIC_ATTENUATION, light.quadraticAttenuation);				
-		
-		} 			
-		lightIndex++;
+            glLightf (GL_LIGHT0+lightIndex, GL_CONSTANT_ATTENUATION, light.constantAttenuation);		
+            glLightf (GL_LIGHT0+lightIndex, GL_LINEAR_ATTENUATION, light.linearAttenuation);				
+            glLightf (GL_LIGHT0+lightIndex, GL_QUADRATIC_ATTENUATION, light.quadraticAttenuation);				
+            lightIndex++;
+		}
 	}
 
 	vector<LightInfo> spotLights = renderer->getSpotLights();
@@ -330,97 +358,97 @@ bool GLSLShaderModule::applyShaderMaterial(Renderer *renderer, Material *materia
 			ambientVal[2] = renderer->ambientColor.b;										
 			ambientVal[3] = 1;
 		
-		GLfloat data4[] = {light.color.x * light.intensity, light.color.y * light.intensity, light.color.z * light.intensity, 1.0};					
-		glLightfv (GL_LIGHT0+lightIndex, GL_DIFFUSE, data4);
-		
-		data4[0] = light.specularColor.r* light.intensity;
-		data4[1] = light.specularColor.g* light.intensity;
-		data4[2] = light.specularColor.b* light.intensity;
-		data4[3] = light.specularColor.a* light.intensity;
-		glLightfv (GL_LIGHT0+lightIndex, GL_SPECULAR, data4);		
-			
-		data4[3] = 1.0;			
-			
-		glLightfv (GL_LIGHT0+lightIndex, GL_AMBIENT, ambientVal);		
-		glLightf (GL_LIGHT0+lightIndex, GL_SPOT_CUTOFF, light.spotlightCutoff);
+            GLfloat data4[] = {light.color.x * light.intensity, light.color.y * light.intensity, light.color.z * light.intensity, 1.0};
+            glLightfv (GL_LIGHT0+lightIndex, GL_DIFFUSE, data4);
+            
+            data4[0] = light.specularColor.r* light.intensity;
+            data4[1] = light.specularColor.g* light.intensity;
+            data4[2] = light.specularColor.b* light.intensity;
+            data4[3] = light.specularColor.a* light.intensity;
+            glLightfv (GL_LIGHT0+lightIndex, GL_SPECULAR, data4);		
+                
+            data4[3] = 1.0;			
+                
+            glLightfv (GL_LIGHT0+lightIndex, GL_AMBIENT, ambientVal);		
+            glLightf (GL_LIGHT0+lightIndex, GL_SPOT_CUTOFF, light.spotlightCutoff);
 
-		glLightf (GL_LIGHT0+lightIndex, GL_SPOT_EXPONENT, light.spotlightExponent);
-		
-		data4[0] = dir.x;
-		data4[1] = dir.y;
-		data4[2] = dir.z;
-		glLightfv (GL_LIGHT0+lightIndex, GL_SPOT_DIRECTION, data4);
+            glLightf (GL_LIGHT0+lightIndex, GL_SPOT_EXPONENT, light.spotlightExponent);
+            
+            data4[0] = dir.x;
+            data4[1] = dir.y;
+            data4[2] = dir.z;
+            glLightfv (GL_LIGHT0+lightIndex, GL_SPOT_DIRECTION, data4);
 
-		data4[0] = pos.x;
-		data4[1] = pos.y;
-		data4[2] = pos.z;
-		glLightfv (GL_LIGHT0+lightIndex, GL_POSITION, data4);		
+            data4[0] = pos.x;
+            data4[1] = pos.y;
+            data4[2] = pos.z;
+            glLightfv (GL_LIGHT0+lightIndex, GL_POSITION, data4);		
 
-		glLightf (GL_LIGHT0+lightIndex, GL_CONSTANT_ATTENUATION, light.constantAttenuation);		
-		glLightf (GL_LIGHT0+lightIndex, GL_LINEAR_ATTENUATION, light.linearAttenuation);				
-		glLightf (GL_LIGHT0+lightIndex, GL_QUADRATIC_ATTENUATION, light.quadraticAttenuation);				
-		
-		if(light.shadowsEnabled) {		
-			if(shadowMapTextureIndex < 4) {
-				switch(shadowMapTextureIndex) {
-					case 0:
-						strcpy(texName, "shadowMap0");
-						strcpy(matName, "shadowMatrix0");						
-					break;
-					case 1:
-						strcpy(texName, "shadowMap1");
-						strcpy(matName, "shadowMatrix1");												
-					break;
-					case 2:
-						strcpy(texName, "shadowMap2");
-						strcpy(matName, "shadowMatrix2");																		
-					break;
-					case 3:
-						strcpy(texName, "shadowMap3");
-						strcpy(matName, "shadowMatrix3");																		
-					break;							
-				}
-			
-				int texture_location = glGetUniformLocation(glslShader->shader_id, texName);
-				glUniform1i(texture_location, textureIndex);
-				glActiveTexture(GL_TEXTURE0 + textureIndex);		
-				glBindTexture(GL_TEXTURE_2D, ((OpenGLTexture*)light.shadowMapTexture)->getTextureID());	
-				textureIndex++;
-				
-				int mloc = glGetUniformLocation(glslShader->shader_id, matName);
-				light.textureMatrix = light.textureMatrix;
-				
-			
-				GLfloat mat[16];
-				for(int z=0; z < 16; z++) {
-					mat[z] = light.textureMatrix.ml[z];
-				}
-				glUniformMatrix4fv(mloc, 1, false, mat);
-		
-					
-			}
-			shadowMapTextureIndex++;
+            glLightf (GL_LIGHT0+lightIndex, GL_CONSTANT_ATTENUATION, light.constantAttenuation);		
+            glLightf (GL_LIGHT0+lightIndex, GL_LINEAR_ATTENUATION, light.linearAttenuation);				
+            glLightf (GL_LIGHT0+lightIndex, GL_QUADRATIC_ATTENUATION, light.quadraticAttenuation);				
+            
+            Number shadowAmount = 0.0;
+            
+            if(light.shadowsEnabled) {
+                if(shadowMapTextureIndex < 4) {
+                    switch(shadowMapTextureIndex) {
+                        case 0:
+                            strcpy(texName, "shadowMap0");
+                            strcpy(matName, "shadowMatrix0");						
+                        break;
+                        case 1:
+                            strcpy(texName, "shadowMap1");
+                            strcpy(matName, "shadowMatrix1");												
+                        break;
+                        case 2:
+                            strcpy(texName, "shadowMap2");
+                            strcpy(matName, "shadowMatrix2");																		
+                        break;
+                        case 3:
+                            strcpy(texName, "shadowMap3");
+                            strcpy(matName, "shadowMatrix3");																		
+                        break;							
+                    }
+                
+                    int texture_location = glGetUniformLocation(glslShader->shader_id, texName);
+                    glUniform1i(texture_location, textureIndex);
+                    glActiveTexture(GL_TEXTURE0 + textureIndex);		
+                    glBindTexture(GL_TEXTURE_2D, ((OpenGLTexture*)light.shadowMapTexture)->getTextureID());	
+                    textureIndex++;
+            
+                    LocalShaderParam *matParam = material->getShaderBinding(shaderIndex)->getLocalParamByName(matName);
+                    if(matParam) {
+                        matParam->setMatrix4(light.textureMatrix);
+                    }
+                    
+                    shadowAmount = 1.0;
+                    
+                }
+                
+                shadowMapTextureIndex++;
+            }
+            
+            LocalShaderParam *amountParam = material->getShaderBinding(shaderIndex)->getLocalParamByName("shadowAmount");
+            if(amountParam) {
+                amountParam->setNumber(shadowAmount);
+            }
+            
+            lightIndex++;
 		}
-	else {							
-			light.shadowsEnabled = false;
-		}		
-		} 	
-		lightIndex++;
 	}
 	glPopMatrix();
 		
 	glEnable(GL_TEXTURE_2D);
-		
-	Matrix4 modelMatrix = renderer->getCurrentModelMatrix();
-	int mloc = glGetUniformLocation(glslShader->shader_id, "modelMatrix");				
-	GLfloat mat[16];
-	for(int z=0; z < 16; z++) {
-		mat[z] = modelMatrix.ml[z];
-	}
-	glUniformMatrix4fv(mloc, 1, false, mat);
-		
-		
-	GLSLShaderBinding *cgBinding = (GLSLShaderBinding*)material->getShaderBinding(shaderIndex);
+
+	Matrix4 modelMatrix = renderer->getModelviewMatrix() * renderer->getCameraMatrix();
+    LocalShaderParam *modelMatrixParam = material->getShaderBinding(shaderIndex)->getLocalParamByName("modelMatrix");
+    
+    if(modelMatrixParam) {
+        modelMatrixParam->setMatrix4(modelMatrix);
+    }
+    
+	ShaderBinding *cgBinding = material->getShaderBinding(shaderIndex);
 	
 	for(int i=0; i < glslShader->expectedParams.size(); i++) {
 		ProgramParam param = glslShader->expectedParams[i];
@@ -428,33 +456,35 @@ bool GLSLShaderModule::applyShaderMaterial(Renderer *renderer, Material *materia
 	}
 		
 	for(int i=0; i < cgBinding->textures.size(); i++) {
-		OpenGLTexture *glTexture = (OpenGLTexture*)cgBinding->textures[i].texture;	
-		if(glTexture) {		
-			int texture_location = glGetUniformLocation(glslShader->shader_id, cgBinding->textures[i].name.c_str());
-			glUniform1i(texture_location, textureIndex);
-			glActiveTexture(GL_TEXTURE0 + textureIndex);		
-			glBindTexture(GL_TEXTURE_2D, glTexture->getTextureID());
-			textureIndex++;
-		}
-	}	
-	
-		
+        if(!localOptions->getTexture(cgBinding->textures[i].name)) {
+            OpenGLTexture *glTexture = (OpenGLTexture*)cgBinding->textures[i].texture;
+            if(glTexture) {		
+                int texture_location = glGetUniformLocation(glslShader->shader_id, cgBinding->textures[i].name.c_str());
+                glUniform1i(texture_location, textureIndex);
+                glActiveTexture(GL_TEXTURE0 + textureIndex);		
+                glBindTexture(GL_TEXTURE_2D, glTexture->getTextureID());
+                textureIndex++;
+            }
+        }
+	}
+			
 	for(int i=0; i < cgBinding->cubemaps.size(); i++) {
-		OpenGLCubemap *glCubemap = (OpenGLCubemap*)cgBinding->cubemaps[i].cubemap;
-		if(glCubemap) {
-			int texture_location = glGetUniformLocation(glslShader->shader_id, cgBinding->cubemaps[i].name.c_str());
-			glUniform1i(texture_location, textureIndex);		
-			glActiveTexture(GL_TEXTURE0 + textureIndex);				
-			glBindTexture(GL_TEXTURE_CUBE_MAP, glCubemap->getTextureID());
-			textureIndex++;
-		}
-	}	
+        if(!localOptions->getCubemap(cgBinding->cubemaps[i].name)) {
+            OpenGLCubemap *glCubemap = (OpenGLCubemap*)cgBinding->cubemaps[i].cubemap;
+            if(glCubemap) {
+                int texture_location = glGetUniformLocation(glslShader->shader_id, cgBinding->cubemaps[i].name.c_str());
+                glUniform1i(texture_location, textureIndex);		
+                glActiveTexture(GL_TEXTURE0 + textureIndex);				
+                glBindTexture(GL_TEXTURE_CUBE_MAP, glCubemap->getTextureID());
+                textureIndex++;
+            }
+        }
+	}
 	
-	cgBinding = (GLSLShaderBinding*)localOptions;
-	for(int i=0; i < cgBinding->textures.size(); i++) {
-		OpenGLTexture *glTexture = (OpenGLTexture*)cgBinding->textures[i].texture;
+	for(int i=0; i < localOptions->textures.size(); i++) {
+		OpenGLTexture *glTexture = (OpenGLTexture*)localOptions->textures[i].texture;
 		if(glTexture) {		
-			int texture_location = glGetUniformLocation(glslShader->shader_id, cgBinding->textures[i].name.c_str());
+			int texture_location = glGetUniformLocation(glslShader->shader_id, localOptions->textures[i].name.c_str());
 			glUniform1i(texture_location, textureIndex);
 			glActiveTexture(GL_TEXTURE0 + textureIndex);		
 			glBindTexture(GL_TEXTURE_2D, glTexture->getTextureID());	
@@ -462,11 +492,11 @@ bool GLSLShaderModule::applyShaderMaterial(Renderer *renderer, Material *materia
 		}
 	}		
 
-	for(int i=0; i < cgBinding->cubemaps.size(); i++) {
-		OpenGLCubemap *glCubemap = (OpenGLCubemap*)cgBinding->cubemaps[i].cubemap;	
+	for(int i=0; i < localOptions->cubemaps.size(); i++) {
+		OpenGLCubemap *glCubemap = (OpenGLCubemap*)localOptions->cubemaps[i].cubemap;
 		if(glCubemap) {
-			int texture_location = glGetUniformLocation(glslShader->shader_id, cgBinding->cubemaps[i].name.c_str());
-			glUniform1i(texture_location, textureIndex);		
+			int texture_location = glGetUniformLocation(glslShader->shader_id, localOptions->cubemaps[i].name.c_str());
+			glUniform1i(texture_location, textureIndex);
 			glActiveTexture(GL_TEXTURE0 + textureIndex);				
 			glBindTexture(GL_TEXTURE_CUBE_MAP, glCubemap->getTextureID());
 			textureIndex++;

@@ -49,7 +49,7 @@ UITreeContainer::UITreeContainer(String icon, String text, Number treeWidth, Num
 	blockMouseInput = true;
 	//bgBox->setPosition(-padding, -padding);
 	
-	scrollChild = new ScreenEntity();
+	scrollChild = new Entity();
 	scrollChild->processInputEvents = true;
 	
 	rootNode = new UITree(icon, text, treeWidth,0);		
@@ -59,11 +59,10 @@ UITreeContainer::UITreeContainer(String icon, String text, Number treeWidth, Num
 	mainContainer = new UIScrollContainer(scrollChild, false, true, treeWidth-conf->getNumericValue("Polycode", "uiScrollDefaultSize"), treeHeight);
 	addChild(mainContainer);
 	
-	width = treeWidth;
-	height = treeHeight;
-	setHitbox(width, height);
+	setWidth(treeWidth);
+	setHeight(treeHeight);
 	
-	Resize(width, height);
+	Resize(getWidth(), getHeight());
 
 	CoreServices::getInstance()->getCore()->getInput()->addEventListener(this, InputEvent::EVENT_KEYDOWN);
 	this->addEventListener(this, InputEvent::EVENT_MOUSEDOWN);
@@ -79,12 +78,23 @@ void UITreeContainer::Resize(Number width, Number height) {
 	mainContainer->setPositionY(0);
 
 	rootNode->Resize(width);
-//	width = x;
-	//	height = y;
-	setHitbox(width, height);
+	setWidth(width);
+	setHeight(height);
+}
+
+UIScrollContainer *UITreeContainer::getScrollContainer() {
+    return mainContainer;
 }
 
 void UITreeContainer::handleEvent(Event *event) {
+
+	if(event->getDispatcher() == CoreServices::getInstance()->getCore()->getInput()) {
+		InputEvent *inputEvent = (InputEvent*) event;
+		if(event->getEventCode() == InputEvent::EVENT_KEYDOWN) {
+			onKeyDown(inputEvent->key, inputEvent->charCode);
+		}
+	}
+
 	if(event->getDispatcher() == rootNode) {
 		if(event->getEventCode() == UITreeEvent::NEED_REFRESH_EVENT) {
 			mainContainer->setContentSize(rootNode->getWidth(), rootNode->getHeight());
@@ -99,8 +109,8 @@ void UITreeContainer::handleEvent(Event *event) {
 		
 		if (!hasFocus) {
 			if (event->getEventCode() == InputEvent::EVENT_MOUSEDOWN) {
-				if (parentEntity && isFocusable())
-					((ScreenEntity*)parentEntity)->focusChild(this);
+				if (focusParent && isFocusable())
+					focusParent->focusChild(this);
 			} else if (event->getEventCode() == InputEvent::EVENT_MOUSEOVER) {
 				CoreServices::getInstance()->getCore()->setCursor(Core::CURSOR_ARROW);
 			}
@@ -120,6 +130,7 @@ UITreeContainer::~UITreeContainer() {
 		delete rootNode;
 		delete mainContainer;
 	}
+	CoreServices::getInstance()->getCore()->getInput()->removeAllHandlersForListener(this);	
 }
 
 void UITreeContainer::onGainFocus() {
@@ -239,7 +250,7 @@ void UITreeContainer::onKeyDown(PolyKEY key, wchar_t charCode) {
 
 void UITreeContainer::scrollToNode(UITree *node, bool showAtTop) {
 	
-	Number nodeY = node->getScreenPosition().y - getRootNode()->getScreenPosition().y;
+	Number nodeY = node->getScreenPositionForMainCamera().y - getRootNode()->getScreenPositionForMainCamera().y;
 	Number contentHeight = mainContainer->getContentSize().y;
 	Number scrollHeight = contentHeight - mainContainer->getHeight();
 	Number viewTop = (contentHeight - mainContainer->getHeight()) * mainContainer->getVScrollBar()->getScrollValue();

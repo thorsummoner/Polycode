@@ -21,6 +21,8 @@
 */
 
 #include "PolyString.h"
+#include <iomanip>
+#include <sstream>
 
 using namespace Polycode;
 using namespace std;
@@ -70,7 +72,7 @@ size_t String::getDataSizeWithEncoding(int encoding) const {
 			return contents.size();
 		}
 		default:
-			return NULL;
+			return 0;
 	}
 }
 const char *String::getDataWithEncoding(int encoding) const {
@@ -155,6 +157,14 @@ vector<String> String::split(const String &delim) const {
 	return tokens;
 }
 
+Number String::toNumber() {
+    return atof(contents.c_str());
+}
+
+int String::toInteger() {
+    return atoi(contents.c_str());
+}
+
 String String::replace(const String &what, const String &withWhat) const {
 
 	size_t pos = 0;
@@ -180,16 +190,15 @@ String String::toUpperCase() const {
 
 
 String String::NumberToString(Number value, int precision) {
-	char temp[128];
-	String precisionStr = String("%.")+IntToString(precision)+String("f");
-	sprintf(temp, precisionStr.c_str(), value);
-	return String(temp);
+    stringstream ss;
+    ss << fixed << setprecision(precision) << value;
+    return String(ss.str());
 }
 
 String String::IntToString(int value) {
-	char temp[128];
-	sprintf(temp, "%d", value);
-	return String(temp);
+	stringstream ss;
+	ss << value;
+	return String(ss.str());
 }
 
 

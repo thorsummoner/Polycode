@@ -22,66 +22,103 @@
  
 #include "TextureBrowser.h"
 
-AssetEntry::AssetEntry(String assetPath, String assetName, String extension) : UIElement() {
+AssetEntry::AssetEntry(String assetPath, String assetName, String extension, Resource *resource) : UIElement() {
 
+    this->resource = resource;
 	this->assetPath = assetPath;
 
 	if(assetName.length() > 20)
 		assetName = assetName.substr(0,20)+"...";
 
-	selectShape = new ScreenShape(ScreenShape::SHAPE_RECT, 120, 100);
+	selectShape = new UIRect(120, 100);
 	selectShape->visible = false;
-	selectShape->setPositionMode(ScreenEntity::POSITION_TOPLEFT);
+	selectShape->setAnchorPoint(-1.0, -1.0, 0.0);
 	addChild(selectShape);
 	selectShape->processInputEvents = true;
 	selectShape->setColor(0.0, 0.0, 0.0, 0.5);
+    selectShape->loadTexture("browserIcons/large_selector.png");
+    selectShape->setBlendingMode(Renderer::BLEND_MODE_NORMAL);
 
-	imageShape = new ScreenShape(ScreenShape::SHAPE_RECT, 64,64);
-	imageShape->setPositionMode(ScreenEntity::POSITION_TOPLEFT);
+	imageShape = new UIRect(64,64);
+	imageShape->setAnchorPoint(-1.0, -1.0, 0.0);
 	addChild(imageShape);
 	
+    spritePreview = NULL;
+    
 	extension = extension.toLowerCase();
 	
-	if(extension == "png") {
+	if(extension == "png" || extension == "hdr" || extension == "jpg" || extension == "tga" || extension == "psd") {
 		imageShape->loadTexture(assetPath);
 	} else if(extension == "ogg" || extension == "wav") {
-		imageShape->loadTexture("Images/sound_thumb.png");
-	} else if(extension == "entity2d") {
-		imageShape->loadTexture("Images/entity_thumb.png");
-	} else if(extension == "entity2d") {
-		imageShape->loadTexture("Images/entity_thumb.png");
-	} else if(extension == "sprite") {
-		imageShape->loadTexture("Images/sprite_thumb.png");		
+		imageShape->loadTexture("browserIcons/sound_icon.png");
+	} else if(extension == "entity") {
+		imageShape->loadTexture("browserIcons/entity_icon.png");
+	} else if(extension == "sprites") {
+		imageShape->loadTexture("browserIcons/sprite_icon.png");
 	} else if(extension == "ttf" || extension == "otf") {
-		imageShape->loadTexture("Images/font_icon.png");
+		imageShape->loadTexture("browserIcons/font_icon.png");
 	} else if(extension == "vert" || extension == "frag") {
-		imageShape->loadTexture("Images/shader_thumb.png");
-	}
+		imageShape->loadTexture("browserIcons/shader_icon.png");
+	} else if(extension == "mesh") {
+		imageShape->loadTexture("browserIcons/mesh_icon.png");
+    } else if(extension == "mat") {
+		imageShape->loadTexture("browserIcons/materials_icon.png");
+    } else if(extension == "material_resource") {
+		imageShape->loadTexture("browserIcons/material_resource_icon.png");
+    } else if(extension == "sprite_resource") {
+		imageShape->visible = false;
+        
+        SpriteSet *spriteSet = (SpriteSet*) CoreServices::getInstance()->getResourceManager()->getResourcePoolByName(assetPath);
+        if(spriteSet) {
+            spritePreview = new SceneSprite(spriteSet);
+            spritePreview->setSpriteByName(assetName);
+            if(spritePreview->getCurrentSprite()) {
+                if(spritePreview->getCurrentSprite()->getNumStates() > 0) {
+                    spritePreview->setSpriteState(spritePreview->getCurrentSprite()->getState(0), 0, false);
+                }
+            }
+            addChild(spritePreview);
+            spritePreview->setBlendingMode(Renderer::BLEND_MODE_NORMAL);
+            
+            spritePreview->setPosition(28+32, 10+32);
+            
+            Number spriteScale = 1.0;
+            if(spritePreview->getHeight() > spritePreview->getWidth()) {
+                spriteScale = 64.0 / spritePreview->getSpriteBoundingBox().y;
+            } else {
+                spriteScale = 64.0 / spritePreview->getSpriteBoundingBox().x;
+            }
+            spritePreview->setScale(spriteScale, spriteScale, 1.0);
+            
+        }
+    }
 
 	
 	imageShape->setPosition(28, 10);
-	
-	nameLabel = new ScreenLabel(assetName, 10);
+    imageShape->setBlendingMode(Renderer::BLEND_MODE_NORMAL);
+    
+    String name = assetName;
+    if(name.length() > 15) {
+        name = name.substr(0, 15)+"...";
+    }
+	nameLabel = new UILabel(name, 11);
 	addChild(nameLabel);
-	nameLabel->color.a = 0.5;
-	nameLabel->setPositionMode(ScreenEntity::POSITION_CENTER);
-	nameLabel->setPosition(60, 90);
+    nameLabel->setPosition((120.0-nameLabel->getWidth())/2.0, 80);
+    
 }
 
 AssetEntry::~AssetEntry() {
 	delete imageShape;
 	delete nameLabel;
 	delete selectShape;
+    if(spritePreview) {
+        delete spritePreview;
+    }
 }
 
 AssetList::AssetList() : UIElement() {
-	
-	bgShape = new ScreenShape(ScreenShape::SHAPE_RECT, 100,100);
-	bgShape->setPositionMode(ScreenEntity::POSITION_TOPLEFT);
-	bgShape->setColor(0.0, 0.0, 0.0, 0.4);
-	addChild(bgShape);
-	
-	reloadButton = new UIImageButton("Images/reload_icon.png");
+	    
+	reloadButton = new UIImageButton("browserIcons/reload_icon.png", 1.0, 20, 20);
 	reloadButton->addEventListener(this, UIEvent::CLICK_EVENT);
 	addChild(reloadButton);	
 	reloadButton->setPosition(10, 5);		
@@ -90,6 +127,10 @@ AssetList::AssetList() : UIElement() {
 
 AssetList::~AssetList() {
 
+}
+
+Resource *AssetList::getSelectedResource() {
+    return selectedResource;
 }
 
 void AssetList::setExtensions(std::vector<String> extensions) {
@@ -108,17 +149,60 @@ bool AssetList::hasExtension(String extension) {
 	return false;
 }
 
-void AssetList::showFolder(String folderPath) {
+void AssetList::showResourcePool(ResourcePool *pool, int resourceFilter) {
+	
+    clearList();
+    
+	Number xPos = 20;
+	Number yPos = 30;
+	
+    std::vector<Resource*> resources = pool->getResources(resourceFilter);
+    
+    String extension;
+    
+    if(resourceFilter == Resource::RESOURCE_MATERIAL ) {
+        extension = "material_resource";
+    } else if(resourceFilter == Resource::RESOURCE_SPRITE ) {
+        extension = "sprite_resource";
+    }
+    
+	for(int i=0; i < resources.size(); i++) {
+        AssetEntry *newEntry = new AssetEntry(pool->getName(), resources[i]->getResourceName(), extension, resources[i]);
+        newEntry->selectShape->addEventListener(this, InputEvent::EVENT_MOUSEDOWN);
+        assetEntries.push_back(newEntry);
+        newEntry->setPosition(xPos, yPos);
+        xPos += 120;
+        if(xPos > 500) {
+            xPos = 20;
+            yPos += 100;
+        }
+        addChild(newEntry);
+	}
+	
+	setWidth(640);
+	
+	if(xPos == 20) {
+		setHeight(yPos+20);
+	} else {
+		setHeight(yPos + 120);
+	}
+}
 
-	currentFolderPath = folderPath;
-
+void AssetList::clearList() {
 	for(int i=0; i < assetEntries.size(); i++) {
 		removeChild(assetEntries[i]);
 		delete assetEntries[i];
 	}
 	assetEntries.clear();
-	
 	currentEntry = NULL;
+    selectedResource = NULL;
+}
+
+void AssetList::showFolder(String folderPath) {
+
+	currentFolderPath = folderPath;
+
+    clearList();
 	
 	vector<OSFileEntry> assets = OSBasics::parseFolder(folderPath, false);	
 	
@@ -129,8 +213,9 @@ void AssetList::showFolder(String folderPath) {
 		OSFileEntry entry = assets[i];
 		if(entry.type != OSFileEntry::TYPE_FOLDER) {
 			if(hasExtension(entry.extension)) {
-				AssetEntry *newEntry = new AssetEntry(entry.fullPath, entry.name, entry.extension);
+				AssetEntry *newEntry = new AssetEntry(entry.fullPath, entry.name, entry.extension, NULL);
 				newEntry->selectShape->addEventListener(this, InputEvent::EVENT_MOUSEDOWN);
+				newEntry->selectShape->addEventListener(this, InputEvent::EVENT_DOUBLECLICK);
 				assetEntries.push_back(newEntry);
 				newEntry->setPosition(xPos, yPos);
 				xPos += 120;
@@ -143,17 +228,15 @@ void AssetList::showFolder(String folderPath) {
 		}
 	}
 	
-	width = 640;
+	setWidth(640);
 	
 	if(xPos == 20) {
-		height = yPos+20;
+		setHeight(yPos+20);
 	} else {
-		height = yPos + 120;	
+		setHeight(yPos + 120);
 	}
 
 	
-	bgShape->setShapeSize(width, height);
-	bgShape->rebuildTransformMatrix();
 	rebuildTransformMatrix();	
 }
 
@@ -162,14 +245,19 @@ void AssetList::handleEvent(Event *event) {
 		showFolder(currentFolderPath);
 	} else {
 		for(int i=0; i < assetEntries.size(); i++) {
-			if(event->getDispatcher() == assetEntries[i]->selectShape && event->getEventCode() == InputEvent::EVENT_MOUSEDOWN) {
-				assetEntries[i]->selectShape->visible = true;
-				selectedPath = assetEntries[i]->assetPath;
-				printf("%s\n", selectedPath.c_str());
-				if(currentEntry) {
-					currentEntry->selectShape->visible = false;
+			if (event->getDispatcher() == assetEntries[i]->selectShape) {
+				if (event->getEventCode() == InputEvent::EVENT_MOUSEDOWN){
+					if (currentEntry) {
+						currentEntry->selectShape->visible = false;
+					}
+					assetEntries[i]->selectShape->visible = true;
+					selectedPath = assetEntries[i]->assetPath;
+					currentEntry = assetEntries[i];
+					selectedResource = assetEntries[i]->resource;
 				}
-				currentEntry = assetEntries[i];
+				if (event->getEventCode() == InputEvent::EVENT_DOUBLECLICK){
+					dispatchEvent(new UIEvent(), UIEvent::OK_EVENT);
+				}
 			}
 		}
 	}
@@ -177,6 +265,8 @@ void AssetList::handleEvent(Event *event) {
 
 AssetBrowser::AssetBrowser() : UIWindow(L"Asset Browser", 850, 500) {
 	defaultTemplateTree = NULL;
+    
+    browseMode = BROWSE_MODE_FILES;
 	
 	Config *conf = CoreServices::getInstance()->getConfig();	
 	String fontName = conf->getStringValue("Polycode", "uiDefaultFontName");
@@ -197,9 +287,10 @@ AssetBrowser::AssetBrowser() : UIWindow(L"Asset Browser", 850, 500) {
 	
 		
 	assetList = new AssetList();
-	
+	assetList->addEventListener(this, UIEvent::OK_EVENT);
+
 	listContainer = new UIScrollContainer(assetList, false, true, 640, 480-topPadding-padding-padding);
-	listContainer->setPosition(220,topPadding+padding);		
+	listContainer->setPosition(220,topPadding+padding);
 	addChild(listContainer);
 
 	cancelButton = new UIButton(L"Cancel", 100);
@@ -217,18 +308,60 @@ AssetBrowser::AssetBrowser() : UIWindow(L"Asset Browser", 850, 500) {
 	currentProject = NULL;
 }
 
+void AssetBrowser::setResourcePools(std::vector<ResourcePool*> pools, int resourceFilter) {
+    
+    if(this->resourceFilter != resourceFilter) {
+        assetList->clearList();
+    }
+    
+    this->resourceFilter = resourceFilter;
+    
+	templateContainer->getRootNode()->clearTree();
+	templateContainer->getRootNode()->setLabelText("Resource pools");
+
+    FolderUserData *userData = (FolderUserData*) templateContainer->getRootNode()->getUserData();
+    if(userData) {
+        delete userData;
+    }
+	templateContainer->getRootNode()->setUserData(NULL);
+    
+    
+    for(int i=0; i < pools.size(); i++) {
+        ResourcePool *pool = pools[i];
+        UITree *newChild = templateContainer->getRootNode()->addTreeChild("folder.png", pool->getName(), (void*)pool);
+        newChild->setUserData(pool);
+    }
+    
+}
+
+void AssetBrowser::setBrowseMode(unsigned int newBrowseMode) {
+    if(browseMode != newBrowseMode) {
+        assetList->clearList();
+        browseMode = newBrowseMode;
+    }
+}
+
 void AssetBrowser::setProject(PolycodeProject *project) {
 	
 	templateContainer->getRootNode()->clearTree();
 
-	vector<OSFileEntry> templates = OSBasics::parseFolder(project->getRootFolder(), false);	
+	vector<OSFileEntry> templates = OSBasics::parseFolder(project->getRootFolder(), false);
 	templateContainer->getRootNode()->setLabelText(project->getProjectName());
 	
-	
+    FolderUserData *userData = (FolderUserData*) templateContainer->getRootNode()->getUserData();
+    if(userData) {
+        delete userData;
+    }
+    
+	FolderUserData *rootData = new FolderUserData();
+    rootData->folderPath = project->getRootFolder();
+    rootData->type = 0;
+    templateContainer->getRootNode()->setUserData(rootData);
+    
 	for(int i=0; i < templates.size(); i++) {
 		OSFileEntry entry = templates[i];
 		if(entry.type == OSFileEntry::TYPE_FOLDER) {
-			UITree *newChild = templateContainer->getRootNode()->addTreeChild("folder.png", entry.name, NULL);			
+			UITree *newChild = templateContainer->getRootNode()->addTreeChild("folder.png", entry.name, NULL);
 			FolderUserData *data = new FolderUserData();
 			data->type = 0;
 			data->folderPath = entry.fullPath;
@@ -239,6 +372,7 @@ void AssetBrowser::setProject(PolycodeProject *project) {
 	}	
 	
 	currentProject = project;
+    templateContainer->getScrollContainer()->setScrollValue(0.0, 0.0);    
 }
 
 AssetBrowser::~AssetBrowser() {
@@ -265,6 +399,11 @@ void AssetBrowser::setExtensions(std::vector<String> extensions) {
 	assetList->setExtensions(extensions);
 }
 
+Resource *AssetBrowser::getSelectedResource() {
+	return assetList->getSelectedResource();
+    
+}
+
 void AssetBrowser::handleEvent(Event *event) {
 	if(event->getEventType() == "UIEvent") {
 		if(event->getEventCode() == UIEvent::CLICK_EVENT) {
@@ -273,16 +412,30 @@ void AssetBrowser::handleEvent(Event *event) {
 			}
 			
 			if(event->getDispatcher() == cancelButton) {
-				dispatchEvent(new UIEvent(), UIEvent::CLOSE_EVENT);				
+				dispatchEvent(new UIEvent(), UIEvent::CLOSE_EVENT);
+                removeAllHandlers();
 			}									
+		}
+		if (event->getEventCode() == UIEvent::OK_EVENT){
+			dispatchEvent(new UIEvent(), UIEvent::OK_EVENT);
 		}
 	}
 	
 	if(event->getEventType() == "UITreeEvent" && event->getEventCode() == UITreeEvent::SELECTED_EVENT) {
 		if(event->getDispatcher() == templateContainer->getRootNode()) {
 			UITreeEvent *treeEvent = (UITreeEvent*) event;
-			FolderUserData *data = (FolderUserData *)treeEvent->selection->getUserData();
-			assetList->showFolder(data->folderPath);
+            
+            if(browseMode == BROWSE_MODE_FILES) {
+                FolderUserData *data = (FolderUserData *)treeEvent->selection->getUserData();
+                if(data) {
+                    assetList->showFolder(data->folderPath);
+                }
+            } else {
+                ResourcePool *pool = (ResourcePool*) treeEvent->selection->getUserData();
+                if(pool) {
+                    assetList->showResourcePool(pool, resourceFilter);
+                }
+            }
 			listContainer->setContentSize(assetList->getWidth(), assetList->getHeight());
 			listContainer->setScrollValue(0,0);
 		}

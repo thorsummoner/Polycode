@@ -32,25 +32,28 @@ using namespace Polycode;
 
 UIVSizer::UIVSizer(Number width, Number height, Number mainHeight, bool topSizer) : UIElement() {
 
-	this->width = width;
-	this->height = height;
+	minimumSize = 100;
+	proportionalResize = false;
+
+	setWidth(width);
+	setHeight(height);
 	this->topSizer = topSizer;
 	this->mainHeight = mainHeight;
 	
-	separatorBgShape = new ScreenShape(ScreenShape::SHAPE_RECT, width,1);
-	separatorBgShape->setPositionMode(ScreenEntity::POSITION_TOPLEFT);
+	separatorBgShape = new UIRect(width,1);
+	separatorBgShape->setAnchorPoint(-1.0, -1.0, 0.0);
 	separatorBgShape->setColor(0.0, 0.0, 0.0, 1.0);	
 	addChild(separatorBgShape);
 
-	childElements = new ScreenEntity();
+	childElements = new Entity();
 	childElements->processInputEvents = true;
 	addChild(childElements);
 	
 	firstElement = NULL;
 	secondElement = NULL;
 	
-	separatorHitShape = new ScreenShape(ScreenShape::SHAPE_RECT, width,8);
-	separatorHitShape->setPositionMode(ScreenEntity::POSITION_TOPLEFT);
+	separatorHitShape = new UIRect(width,8);
+	separatorHitShape->setAnchorPoint(-1.0, -1.0, 0.0);
 	separatorHitShape->setColor(1.0, 0.0, 0.0, 0.5);	
 	addChild(separatorHitShape);
 	separatorHitShape->blockMouseInput = true;
@@ -76,10 +79,8 @@ UIVSizer::UIVSizer(Number width, Number height, Number mainHeight, bool topSizer
 
 UIVSizer::~UIVSizer() {
 	coreInput->removeAllHandlersForListener(this);
-	
-	if (ownsChildren)
-		childElements->ownsChildren = true;
-		
+			
+    childElements->ownsChildren = false;
 	if(!ownsChildren) {
 		delete childElements;	
 		delete separatorBgShape;
@@ -116,9 +117,9 @@ void UIVSizer::handleEvent(Event *event) {
 			case InputEvent::EVENT_MOUSEMOVE:
 				if(resizing == true) {
 					if(topSizer) {
-						setMainHeight(baseMainHeight + (inputEvent->mousePosition.y-baseMouseY));
+						setMainHeightWithMinimum(baseMainHeight + (inputEvent->mousePosition.y-baseMouseY));
 					} else {
-						setMainHeight(baseMainHeight - (inputEvent->mousePosition.y-baseMouseY));		
+						setMainHeightWithMinimum(baseMainHeight - (inputEvent->mousePosition.y-baseMouseY));		
 					}
 				} else {
 					baseMouseY = inputEvent->mousePosition.y;
@@ -128,9 +129,18 @@ void UIVSizer::handleEvent(Event *event) {
 	}
 }
 
+void UIVSizer::setProportionalResize(bool val) {
+	proportionalResize = val;
+}
+
 void UIVSizer::Resize(Number width, Number height) {
-	this->width = width;
-	this->height = height;
+
+	if(proportionalResize) {
+		mainHeight = mainHeight * (height/getHeight());
+	}
+	
+	setWidth(width);
+	setHeight(height);
 	matrixDirty = true;
 	updateSizer();
 	UIElement::Resize(width, height);
@@ -138,6 +148,20 @@ void UIVSizer::Resize(Number width, Number height) {
 
 Number UIVSizer::getMainHeight() {
 	return mainHeight;
+}
+
+void UIVSizer::setMainHeightWithMinimum(Number newHeight) {
+	if(newHeight < minimumSize) {
+		newHeight = minimumSize;
+	}	
+	if(newHeight > getHeight()-minimumSize) {
+		newHeight = getHeight()-minimumSize;
+	}
+	setMainHeight(newHeight);
+}
+
+void UIVSizer::setMinimumSize(Number minimumSize) {
+	this->minimumSize = minimumSize;
 }
 
 void UIVSizer::setMainHeight(Number height) {
@@ -158,41 +182,63 @@ void UIVSizer::addBottomChild(UIElement *element) {
 	updateSizer();
 }
 
+void UIVSizer::removeTopChild() {
+	if(firstElement) {
+		childElements->removeChild(firstElement);
+		firstElement = NULL;
+	}
+}
+
+void UIVSizer::removeBottomChild() {
+	if(secondElement) {
+		childElements->removeChild(secondElement);
+		secondElement = NULL;
+	}
+}
+
+UIElement *UIVSizer::getTopChild() {
+	return firstElement;
+}
+
+UIElement *UIVSizer::getBottomChild() {
+	return secondElement;
+}
+
 void UIVSizer::updateSizer() {
 
 	if(topSizer) {
 	
 		if(firstElement) {
 			firstElement->setPosition(0,0);
-			firstElement->Resize(width, mainHeight);
+			firstElement->Resize(getWidth(), mainHeight);
 		}
 	
 		if(secondElement) {
 			secondElement->setPosition(0,mainHeight+1);
-			secondElement->Resize(width, height-mainHeight-1);				
+			secondElement->Resize(getWidth(), getHeight()-mainHeight-1);				
 		}
 
-		separatorBgShape->setShapeSize(width, 1);
+		separatorBgShape->Resize(getWidth(), 1);
 		separatorBgShape->setPosition(0,mainHeight);
-		separatorHitShape->setShapeSize(width, 8);
+		separatorHitShape->Resize(getWidth(), 8);
 		separatorHitShape->setPosition(0, mainHeight-4);
 		
 	} else {
 
 		if(firstElement) {
 			firstElement->setPosition(0,0);
-			firstElement->Resize(width, height-mainHeight);
+			firstElement->Resize(getWidth(), getHeight()-mainHeight);
 		}
 	
 		if(secondElement) {
-			secondElement->setPosition(0,height-mainHeight+1);
-			secondElement->Resize(width, mainHeight-1);	
+			secondElement->setPosition(0,getHeight()-mainHeight+1);
+			secondElement->Resize(getWidth(), mainHeight-1);	
 		}
 
-		separatorBgShape->setShapeSize(width, 1);
-		separatorBgShape->setPosition(0,height-mainHeight);
-		separatorHitShape->setShapeSize(width, 8);
-		separatorHitShape->setPosition(0, height-mainHeight-4);
+		separatorBgShape->Resize(getWidth(), 1);
+		separatorBgShape->setPosition(0,getHeight()-mainHeight);
+		separatorHitShape->Resize(getWidth(), 8);
+		separatorHitShape->setPosition(0, getHeight()-mainHeight-4);
 
 	}	
 

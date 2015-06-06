@@ -48,6 +48,7 @@ void wtoc(char* Dest, const WCHAR* Source)
 		Dest[i] = (char)Source[i];
 		++i;
 	}
+	Dest[i] = 0;
 }
 void ctow(WCHAR* Dest, const char* Source)
 {
@@ -56,6 +57,7 @@ void ctow(WCHAR* Dest, const char* Source)
 		Dest[i] = (WCHAR)Source[i];
 		++i;
 	}
+	Dest[i] = 0;
 }
 
 #endif
@@ -63,7 +65,7 @@ void ctow(WCHAR* Dest, const char* Source)
 OSFileEntry::OSFileEntry(const Polycode::String& fullPath, int type) {
 	std::vector<String> parts = fullPath.split("/");
 	
-	if(parts.size() > 0) {
+	if(parts.size() > 1) {
 		String path = parts[0];
 
 		if(parts.size() > 1) {		
@@ -85,7 +87,9 @@ OSFileEntry::OSFileEntry(const String& path, const String& name, int type) {
 void OSFileEntry::init(const Polycode::String& path, const Polycode::String& name, int type) {
 	this->basePath = path;
 
-	if(path == "/") {
+    if(path == "") {
+        this->fullPath = name;
+	} else if(path == "/") {
 		this->fullPath = "/" + name;
 	} else {
 		this->fullPath = path + "/" + name;
@@ -311,17 +315,14 @@ vector<OSFileEntry> OSBasics::parseFolder(const String& pathString, bool showHid
 	SetCurrentDirectory(tmp);
 
 
-	HANDLE hFind = FindFirstFile((LPCWSTR)"*", &findFileData);
+	HANDLE hFind = FindFirstFile(L"*", &findFileData);
 	if(hFind  == INVALID_HANDLE_VALUE) {
 		SetCurrentDirectory(curDir);
 		return returnVector;
 	}
 
-	char fileName[260];
 	do {		
-		memset(fileName, 0, 260);
-		wtoc(fileName, findFileData.cFileName);
-		String fname = string(fileName);
+		String fname(findFileData.cFileName);
 		
 		if((fname.c_str()[0] != '.' || (fname.c_str()[0] == '.'  && showHidden)) && fname != "..") {
 			if( findFileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY ) {

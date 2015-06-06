@@ -21,8 +21,13 @@
 */
 #include "PolyEntity.h"
 #include "PolyRenderer.h"
+#include "PolyCoreServices.h"
+#include "PolyInputEvent.h"
 
 using namespace Polycode;
+
+
+int Entity::defaultBlendingMode = Renderer::BLEND_MODE_NORMAL;
 
 Rotation::Rotation() {
 	pitch = 0;
@@ -31,36 +36,49 @@ Rotation::Rotation() {
 }
 
 Entity::Entity() : EventDispatcher() {
+	initEntity();
+}
+
+Entity::Entity(Number width, Number height, Number depth) : EventDispatcher() {
+	initEntity();
+	bBox.x = width;
+	bBox.y = height;
+	bBox.z = depth;		
+}
+
+void Entity::initEntity() {
 	userData = NULL;
 	scale.set(1,1,1);
 	renderer = NULL;
 	enabled = true;
 	depthTest = true;
 	visible = true;
-	bBoxRadius = 0;
 	color.setColor(1.0f,1.0f,1.0f,1.0f);
 	parentEntity = NULL;
 	matrixDirty = true;
-	matrixAdj = 1.0f;
 	billboardMode = false;
 	billboardRoll = false;
 	billboardIgnoreScale = false;
-	backfaceCulled = true;
 	depthOnly = false;
 	depthWrite = true;
 	ignoreParentMatrix = false;
-	alphaTest = false;
-	blendingMode = Renderer::BLEND_MODE_NORMAL;	
+	blendingMode = Entity::defaultBlendingMode;
 	lockMatrix = false;
-	renderWireframe  = false;
 	colorAffectsChildren = true;
 	visibilityAffectsChildren = true;
 	ownsChildren = false;
 	enableScissor = false;
-	
+	processInputEvents = false;
+	blockMouseInput = false;
 	editorOnly = false; 
-
+	snapToPixels = false;
 	tags = NULL;
+	bBox.z = 0.001;
+	mouseOver = false;
+	yAdjust = 1.0;
+	lastClickTicks = 0.0;
+    rendererVis = true;
+    layerID = 0;
 }
 
 Entity *Entity::getEntityById(String id, bool recursive) const {
@@ -87,16 +105,12 @@ Entity *Entity::Clone(bool deepClone, bool ignoreEditorOnly) const {
 
 void Entity::applyClone(Entity *clone, bool deepClone, bool ignoreEditorOnly) const {
 	clone->ownsChildren = ownsChildren;
-	clone->position = position;
-	clone->rotation = rotation;
-	clone->scale = scale;
+	clone->setPosition(position);
+	clone->setRotationByQuaternion(rotationQuat);
+	clone->setScale(scale);
 	clone->color = color;
-	clone->custEntityType = custEntityType;
 	clone->billboardMode = billboardMode;	
 	clone->billboardRoll = billboardRoll;
-	clone->alphaTest = alphaTest;
-	clone->backfaceCulled = backfaceCulled;
-	clone->renderWireframe = renderWireframe;
 	clone->depthWrite = depthWrite;
 	clone->depthTest = depthTest;
 	clone->blendingMode = blendingMode;
@@ -109,7 +123,11 @@ void Entity::applyClone(Entity *clone, bool deepClone, bool ignoreEditorOnly) co
 	clone->ignoreParentMatrix = ignoreParentMatrix;
 	clone->enableScissor = enableScissor;
 	clone->scissorBox = scissorBox;
-	clone->editorOnly = editorOnly;	
+	clone->editorOnly = editorOnly;
+	clone->snapToPixels = snapToPixels;
+    clone->setAnchorPoint(anchorPoint);
+    clone->layerID = layerID;
+    
 	clone->id = id;
 	if(tags == NULL) {
 		clone->tags = NULL;
@@ -137,6 +155,23 @@ void Entity::setOwnsChildrenRecursive(bool val) {
 	for(int i=0; i < children.size(); i++) {
 		children[i]->setOwnsChildrenRecursive(val);
 	}
+}
+
+std::vector<Entity*> Entity::getEntitiesByLayerID(unsigned char layerID, bool recursive) const {
+	std::vector<Entity*> retVector;
+    
+	for(int i=0;i<children.size();i++) {
+		if(children[i]->layerID == layerID) {
+			retVector.push_back(children[i]);
+		}
+		
+		if(recursive) {
+			std::vector<Entity*> childVector = children[i]->getEntitiesByLayerID(layerID, recursive);
+			retVector.insert(retVector.end(), childVector.begin(), childVector.end());
+		}
+	}
+	
+	return retVector;
 }
 
 std::vector<Entity*> Entity::getEntitiesByTag(String tag, bool recursive) const {
@@ -184,10 +219,8 @@ Color Entity::getCombinedColor() const {
 Matrix4 Entity::getLookAtMatrix(const Vector3 &loc, const Vector3 &upVector) {
 	rebuildTransformMatrix();
 	Vector3 D;
-	if(parentEntity)
-		D = loc - (parentEntity->getConcatenatedMatrix() *position);		
-	else
-		D = loc - position;
+    
+    D = loc - position;
 	
 	Vector3 back = D * -1;
 	back.Normalize();
@@ -208,6 +241,8 @@ Matrix4 Entity::getLookAtMatrix(const Vector3 &loc, const Vector3 &upVector) {
 void Entity::lookAt(const Vector3 &loc, const Vector3 &upVector) {	
 	Matrix4 newMatrix = getLookAtMatrix(loc, upVector);
 	rotationQuat.createFromMatrix(newMatrix);
+    rotation = rotationQuat.toEulerAngles();
+    rotation = rotation * TODEGREES; 
 	matrixDirty = true;
 }
 
@@ -221,6 +256,7 @@ void Entity::lookAtEntity(Entity *entity,  const Vector3 &upVector) {
 void Entity::removeChild(Entity *entityToRemove) {
 	for(int i=0;i<children.size();i++) {
 		if(children[i] == entityToRemove) {
+            entityToRemove->setParentEntity(NULL);
 			children.erase(children.begin()+i);
 			return;
 		}
@@ -281,7 +317,10 @@ Entity *Entity::getChildAtIndex(unsigned int index) {
 }
 
 void Entity::addChild(Entity *newChild) {
-	addEntity(newChild);
+	newChild->setRenderer(renderer);
+	newChild->setParentEntity(this);
+	newChild->setInverseY(getInverseY());
+	children.push_back(newChild);
 }
 
 void Entity::setColor(Color color) {
@@ -296,38 +335,8 @@ void Entity::setColor(Number r, Number g, Number b, Number a) {
 	color.setColor(r,g,b,a);
 }
 
-void Entity::recalculateBBox() {
-	
-}
-
 void Entity::setBlendingMode(int newBlendingMode) {
 	blendingMode = newBlendingMode;
-}
-
-Number Entity::getBBoxRadius() const {
-	Number compRad;
-	Number biggest = bBoxRadius;
-	for(int i=0;i<children.size();i++) {
-		compRad = children[i]->getCompoundBBoxRadius();
-		if(compRad > biggest)
-			biggest = compRad;
-	}	
-	return biggest;
-}
-
-Number Entity::getCompoundBBoxRadius() const {
-	Number compRad;
-	Number biggest = bBoxRadius + position.distance(Vector3(0,0,0));
-	for(int i=0;i<children.size();i++) {
-		compRad = children[i]->getCompoundBBoxRadius();
-		if(compRad > biggest)
-			biggest = compRad;
-	}	
-	return biggest;
-}
-
-void Entity::setBBoxRadius(Number rad) {
-	bBoxRadius = rad;
 }
 
 Entity::~Entity() {
@@ -339,16 +348,35 @@ Entity::~Entity() {
 	if(tags) delete tags;
 }
 
-Vector3 Entity::getChildCenter() const {
-	return childCenter;
+void Entity::setInverseY(bool val) {
+	if(val) {
+		yAdjust = -1.0;
+	} else {
+		yAdjust = 1.0;	
+	}
+	for(int i=0; i < children.size(); i++) {
+		children[i]->setInverseY(val);
+	}
+    matrixDirty = true;
 }
 
+bool Entity::getInverseY() {
+	return (yAdjust == -1.0);
+}
 
 Matrix4 Entity::buildPositionMatrix() {
 	Matrix4 posMatrix;
-	posMatrix.m[3][0] = position.x*matrixAdj;
-	posMatrix.m[3][1] = position.y*matrixAdj;
-	posMatrix.m[3][2] = position.z*matrixAdj;
+	
+	posMatrix.m[3][0] = position.x;
+	posMatrix.m[3][1] = position.y * yAdjust;
+	posMatrix.m[3][2] = position.z;
+
+	if(snapToPixels) {
+		posMatrix.m[3][0] = round(posMatrix.m[3][0]);
+		posMatrix.m[3][1] = round(posMatrix.m[3][1]);
+		posMatrix.m[3][2] = round(posMatrix.m[3][2]);		
+	}
+
 	return posMatrix;
 }
 
@@ -374,36 +402,30 @@ void Entity::rebuildTransformMatrix() {
 }
 
 void Entity::doUpdates() {
-	Update();
-	for(int i=0; i < children.size(); i++) {
-		children[i]->doUpdates();
-	}	
-}
-
-void Entity::checkTransformSetters() {
-	if(_position != position) {
-		_position = position;
-		matrixDirty = true;
-	}
-
-	if(_scale != scale) {
-		_scale = scale;
-		matrixDirty = true;
-	}
-
-	if(_rotation != rotation) {
-		_rotation = rotation;
-		rebuildRotation();
-		matrixDirty = true;
+	if (enabled) {
+		Update();
+		for(int i=0; i < children.size(); i++) {
+			children[i]->doUpdates();
+		}
 	}
 }
 
-void Entity::updateEntityMatrix() {	
-	checkTransformSetters();
+void Entity::doFixedUpdates() {
+	if (enabled) {
+		fixedUpdate();
+		for(int i=0; i < children.size(); i++) {
+			children[i]->doFixedUpdates();
+		}
+	}
+}
 
-	if(matrixDirty)
+void Entity::updateEntityMatrix() {
+
+	if(matrixDirty) {
 		rebuildTransformMatrix();
-	
+        recalculateAABBAllChildren();
+	}
+    
 	for(int i=0; i < children.size(); i++) {
 		children[i]->updateEntityMatrix();
 	}
@@ -412,17 +434,17 @@ void Entity::updateEntityMatrix() {
 Vector3 Entity::getCompoundScale() const {
 	if(parentEntity != NULL) {
 		Vector3 parentScale = parentEntity->getCompoundScale();
-		return Vector3(scale.x * parentScale.x, scale.y * parentScale.y,scale.z * parentScale.z);
+		return Vector3(scale.x * parentScale.x, scale.y * parentScale.y, scale.z * parentScale.z);
 		
+	} else {
+		return scale;
 	}
-	else
-		return scale;	
 }
 
 
 Matrix4 Entity::getConcatenatedRollMatrix() const {
 	Quaternion q;
-	q.createFromAxisAngle(0.0f, 0.0f, 1.0f, _rotation.roll*matrixAdj);
+	q.createFromAxisAngle(0.0f, 0.0f, 1.0f, rotation.z);
 	Matrix4 transformMatrix = q.createMatrix();	
 	
 	if(parentEntity != NULL) 
@@ -431,11 +453,30 @@ Matrix4 Entity::getConcatenatedRollMatrix() const {
 		return transformMatrix;	
 }
 
+Vector2 Entity::getScreenPosition(const Matrix4 &projectionMatrix, const Matrix4 &cameraMatrix, const Polycode::Rectangle &viewport) {
+	if(renderer){
+		return renderer->Project(cameraMatrix, projectionMatrix, viewport, getConcatenatedMatrix().getPosition());
+	} else {
+		return Vector2();
+	}
+}
+
+Vector2 Entity::getScreenPositionForMainCamera() {
+	if(renderer) {
+		return getScreenPosition(renderer->getProjectionMatrix(), renderer->getCameraMatrix(), renderer->getViewport());
+	} else {
+		return Vector2();
+	}
+}
 
 void Entity::transformAndRender() {
 	if(!renderer || !enabled)
 		return;
 
+	if(matrixDirty) {
+		rebuildTransformMatrix();
+    }
+    
 	if(depthOnly) {
 		renderer->drawToColorBuffer(false);
 	}
@@ -461,13 +502,9 @@ void Entity::transformAndRender() {
 	renderer->pushMatrix();
 	if(ignoreParentMatrix && parentEntity) {
 		renderer->multModelviewMatrix(parentEntity->getConcatenatedMatrix().Inverse());
-//		renderer->setCurrentModelMatrix(parentEntity->getConcatenatedMatrix().Inverse());
 	}
 
-		renderer->multModelviewMatrix(transformMatrix);
-		renderer->setCurrentModelMatrix(transformMatrix);
-		
-	renderer->setVertexColor(color.r,color.g,color.b,color.a);
+    renderer->multModelviewMatrix(transformMatrix);
 	
 	if(billboardMode) {
 		if(billboardIgnoreScale) {
@@ -489,33 +526,36 @@ void Entity::transformAndRender() {
 		renderer->enableDepthTest(false);
 	else
 		renderer->enableDepthTest(true);
-		 
-	renderer->enableAlphaTest(alphaTest);
 	
-	Color combined = getCombinedColor();
-	renderer->setVertexColor(combined.r,combined.g,combined.b,combined.a);
+    renderer->pushVertexColor();
+	renderer->multiplyVertexColor(color);
 	
 	renderer->setBlendingMode(blendingMode);
-	renderer->enableBackfaceCulling(backfaceCulled);
-	
-	int mode = renderer->getRenderMode();
-	if(renderWireframe)
-		renderer->setRenderMode(Renderer::RENDER_MODE_WIREFRAME);
-	else
-		renderer->setRenderMode(Renderer::RENDER_MODE_NORMAL);	
-	if(visible) {
+	   
+	if(visible && rendererVis) {
+		renderer->pushMatrix();		
+		renderer->translate3D(-anchorPoint.x * bBox.x * 0.5, -anchorPoint.y * bBox.y * 0.5 * yAdjust, -anchorPoint.z * bBox.z * 0.5);
 		Render();
+		renderer->popMatrix();
 	}
+    
+    if(!colorAffectsChildren) {
+        renderer->pushVertexColor();
+        renderer->loadVertexColorIdentity();
+        if(visible || (!visible && !visibilityAffectsChildren)) {
+            renderChildren();
+        }
+        renderer->popVertexColor();
+    } else {
+        if(visible || (!visible && !visibilityAffectsChildren)) {
+            renderChildren();
+        }
+    }
 		
-	if(visible || (!visible && !visibilityAffectsChildren)) {
-		adjustMatrixForChildren();
-		renderChildren();	
-	}
-		
-				
-	renderer->setRenderMode(mode);	
+    renderer->popVertexColor();
+    
 	renderer->popMatrix();
-		
+	
 	if(!depthWrite)
 		renderer->enableDepthWrite(true);
 	
@@ -537,12 +577,6 @@ void Entity::setRenderer(Renderer *renderer) {
 	}
 }
 
-void Entity::addEntity(Entity *newChild) {
-	newChild->setRenderer(renderer);
-	newChild->setParentEntity(this);
-	children.push_back(newChild);	
-}
-
 
 void Entity::renderChildren() {
 	for(int i=0;i<children.size();i++) {
@@ -554,11 +588,119 @@ void Entity::dirtyMatrix(bool val) {
 	matrixDirty = val;
 }
 
+void Entity::recalculateAABBAllChildren() {
+    recalculateAABB();
+    for(int i=0; i< children.size(); i++) {
+        children[i]->recalculateAABBAllChildren();
+    }
+}
+
+void Entity::recalculateAABB() {
+
+    aabb.min = Vector3();
+    aabb.max = Vector3();
+    
+    Vector3 bBoxCoords[8] = {
+        Vector3(-bBox.x * 0.5, -bBox.y * 0.5, bBox.z * 0.5),
+        Vector3(bBox.x * 0.5, -bBox.y * 0.5, bBox.z * 0.5),
+        Vector3(-bBox.x * 0.5, -bBox.y * 0.5, -bBox.z * 0.5),
+        Vector3(bBox.x * 0.5, -bBox.y * 0.5, -bBox.z * 0.5),
+        Vector3(-bBox.x * 0.5, bBox.y * 0.5, bBox.z * 0.5),
+        Vector3(bBox.x * 0.5, bBox.y * 0.5, bBox.z * 0.5),
+        Vector3(-bBox.x * 0.5, bBox.y * 0.5, -bBox.z * 0.5),
+        Vector3(bBox.x * 0.5, bBox.y * 0.5, -bBox.z * 0.5)
+    };
+    
+    Matrix4 fullMatrix = getAnchorAdjustedMatrix();
+    if(ignoreParentMatrix) {
+        if(matrixDirty) {
+            rebuildTransformMatrix();
+        }
+        fullMatrix = transformMatrix;
+    }
+    
+    for(int i=0; i < 8; i++) {
+        bBoxCoords[i] = fullMatrix * bBoxCoords[i];
+        if(i ==0 ) {
+            aabb.min = bBoxCoords[i];
+            aabb.max = bBoxCoords[i];
+        } else {
+            if(bBoxCoords[i].x < aabb.min.x) {
+                aabb.min.x = bBoxCoords[i].x;
+            }
+            if(bBoxCoords[i].y < aabb.min.y) {
+                aabb.min.y = bBoxCoords[i].y;
+            }
+            if(bBoxCoords[i].z < aabb.min.z) {
+                aabb.min.z = bBoxCoords[i].z;
+            }
+            
+            if(bBoxCoords[i].x > aabb.max.x) {
+                aabb.max.x = bBoxCoords[i].x;
+            }
+            if(bBoxCoords[i].y > aabb.max.y) {
+                aabb.max.y = bBoxCoords[i].y;
+            }
+            if(bBoxCoords[i].z > aabb.max.z) {
+                aabb.max.z = bBoxCoords[i].z;
+            }
+        }
+    }
+        
+}
+
+AABB Entity::getWorldAABB() {
+    return aabb;
+}
+
+Vector3 Entity::getLocalBoundingBox() {
+    return bBox;
+}
+
+void Entity::setLocalBoundingBox(const Vector3 box) {
+    bBox = box;
+    recalculateAABB();
+    matrixDirty = true;
+}
+
+void Entity::setLocalBoundingBox(Number x, Number y, Number z) {
+    bBox.set(x, y, z);
+    recalculateAABB();
+    matrixDirty = true;
+}
+
+void Entity::setLocalBoundingBoxX(Number x) {
+    bBox.x = x;
+    recalculateAABB();
+    matrixDirty = true;
+}
+
+void Entity::setLocalBoundingBoxY(Number y) {
+    bBox.y = y;
+    recalculateAABB();
+    matrixDirty = true;
+}
+
+void Entity::setLocalBoundingBoxZ(Number z) {
+    bBox.z = z;
+    recalculateAABB();
+    matrixDirty = true;
+}
+
 void Entity::setRotationQuat(Number w, Number x, Number y, Number z) {
 	rotationQuat.w = w;
 	rotationQuat.x = x;
 	rotationQuat.y = y;
 	rotationQuat.z = z;
+    rotation = rotationQuat.toEulerAngles();
+    rotation = rotation * TODEGREES;
+	matrixDirty = true;
+}
+
+void Entity::setRotationByQuaternion(const Quaternion &quaternion) {
+	rotationQuat = quaternion;
+    rotation = quaternion.toEulerAngles();
+    rotation = rotation * TODEGREES;
 	matrixDirty = true;
 }
 
@@ -566,28 +708,47 @@ Quaternion Entity::getRotationQuat() const {
 	return rotationQuat;
 }
 
+Quaternion Entity::getConcatenatedQuat() const {
+    if(parentEntity ) {
+        return rotationQuat * parentEntity->getConcatenatedQuat();
+    } else {
+        return rotationQuat;
+    }
+}
+
 Vector3 Entity::getScale() const {
 	return scale;
 }
 
-Matrix4 Entity::getConcatenatedMatrixRelativeTo(Entity *relativeEntity) {
-	checkTransformSetters();
-	
-	if(matrixDirty)
-		rebuildTransformMatrix();
+Vector3 Entity::getRotationEuler() const {
+    return rotation;
+}
 
-	if(parentEntity != NULL && parentEntity != relativeEntity) 
+Matrix4 Entity::getConcatenatedMatrixRelativeTo(Entity *relativeEntity) {
+	
+	if(matrixDirty) {
+		rebuildTransformMatrix();
+    }
+
+	if(parentEntity != NULL && parentEntity != relativeEntity)
 		return transformMatrix * parentEntity->getConcatenatedMatrixRelativeTo(relativeEntity);
 	else
 		return transformMatrix;
 }
 
-Matrix4 Entity::getConcatenatedMatrix() {
-	checkTransformSetters();
-	if(matrixDirty)
-		rebuildTransformMatrix();
+Matrix4 Entity::getAnchorAdjustedMatrix() {
+	Matrix4 mat = getConcatenatedMatrix();
+	Matrix4 adjust;
+	adjust.setPosition(-anchorPoint.x * bBox.x * 0.5, -anchorPoint.y * bBox.y * 0.5 * yAdjust, -anchorPoint.z * bBox.z * 0.5);
+	return adjust * mat;
+}
 
-	if(parentEntity != NULL) 
+Matrix4 Entity::getConcatenatedMatrix() {
+	if(matrixDirty) {
+		rebuildTransformMatrix();
+    }
+    
+	if(parentEntity != NULL && !ignoreParentMatrix) 
 		return transformMatrix * parentEntity->getConcatenatedMatrix();
 	else
 		return transformMatrix;
@@ -598,38 +759,49 @@ const Matrix4& Entity::getTransformMatrix() const {
 }
 
 void Entity::Pitch(Number pitch) {
-	rotation.pitch += pitch;
+	rotation.x += pitch;
+	rebuildRotation();	
 	matrixDirty = true;
 }
 
 void Entity::Yaw(Number yaw) {
-	rotation.yaw += yaw;
+	rotation.y += yaw;
+	rebuildRotation();	
 	matrixDirty = true;
 }
 
 void Entity::Roll(Number roll) {
-	rotation.roll += roll;
+	rotation.z += roll;
+	rebuildRotation();	
 	matrixDirty = true;
 }
 
 void Entity::setRoll(Number roll) {
-	rotation.roll = roll;
+	rotation.z = roll;
+	rebuildRotation();	
 	matrixDirty = true;
 }
 
 void Entity::setPitch(Number pitch) {
-	rotation.pitch = pitch;
+	rotation.x = pitch;
+	rebuildRotation();	
 	matrixDirty = true;
 }
 
 void Entity::setYaw(Number yaw) {
-	rotation.yaw = yaw;
+	rotation.y = yaw;
+	rebuildRotation();
 	matrixDirty = true;
 }
 
+void Entity::setRotationEuler(const Vector3 &rotation) {
+    this->rotation = rotation;
+    rebuildRotation();
+    matrixDirty = true;
+}
 
 void Entity::rebuildRotation() {
-	rotationQuat.fromAxes(_rotation.pitch, _rotation.yaw, _rotation.roll);
+	rotationQuat.fromAxes(rotation.x, rotation.y, rotation.z);
 }
 
 void Entity::setEntityProp(const String& propName, const String& propValue) {
@@ -667,16 +839,40 @@ void Entity::setParentEntity(Entity *entity) {
 	parentEntity = entity;
 }
 
+void Entity::setWidth(Number width) {
+	setLocalBoundingBoxX(width);
+}
+
+void Entity::setHeight(Number height) {
+	setLocalBoundingBoxY(height);
+}
+
+void Entity::setDepth(Number depth) {
+	setLocalBoundingBoxZ(depth);
+}
+
+Number Entity::getWidth() const {
+	return bBox.x;
+}
+
+Number Entity::getHeight() const {
+	return bBox.y;
+}
+
+Number Entity::getDepth() const {
+	return bBox.z;
+}
+
 Number Entity::getPitch() const {
-	return rotation.pitch;
+	return rotation.x;
 }
 
 Number Entity::getYaw() const {
-	return rotation.yaw;
+	return rotation.y;
 }
 
 Number Entity::getRoll() const {
-	return rotation.roll;
+	return rotation.z;
 }
 
 void Entity::setTransformByMatrixPure(const Matrix4& matrix) {
@@ -744,6 +940,11 @@ void Entity::Translate(Number x, Number y, Number z) {
 	matrixDirty = true;
 }
 
+void Entity::Scale(const Vector3 &scale) {
+	this->scale = this->scale * scale;
+	matrixDirty = true;
+}
+
 void Entity::Scale(Number x, Number y, Number z) {
 	scale.x *= x;
 	scale.y *= y;
@@ -762,25 +963,29 @@ Vector3 Entity::getPosition() const {
 	return position;
 }
 
+Vector2 Entity::getPosition2D() const {
+	return Vector2(position.x, position.y);
+}
+
 Number Entity::getCombinedPitch() const {
 	if(parentEntity != NULL)
-		return parentEntity->getCombinedPitch()+rotation.pitch;
+		return parentEntity->getCombinedPitch()+rotation.x;
 	else
-		return rotation.pitch;
+		return rotation.x;
 }
 
 Number Entity::getCombinedYaw() const {
 	if(parentEntity != NULL)
-		return parentEntity->getCombinedYaw()+rotation.yaw;
+		return parentEntity->getCombinedYaw()+rotation.y;
 	else
-		return rotation.yaw;
+		return rotation.y;
 }
 
 Number Entity::getCombinedRoll() const {
 	if(parentEntity != NULL)
-		return parentEntity->getCombinedRoll()+rotation.roll;
+		return parentEntity->getCombinedRoll()+rotation.z;
 	else
-		return rotation.roll;	
+		return rotation.z;
 }
 
 unsigned int Entity::getNumTags() const {
@@ -816,3 +1021,232 @@ void Entity::addTag(String tag) {
 	}
 }
 
+void Entity::setAnchorPoint(const Vector3 &anchorPoint) {
+	this->anchorPoint = anchorPoint;
+    matrixDirty = true;
+}
+
+void Entity::setAnchorPoint(Number x, Number y, Number z) {
+	anchorPoint.set(x,y,z);
+    matrixDirty = true;
+}
+
+Vector3 Entity::getAnchorPoint() const {
+	return anchorPoint;
+}
+
+
+MouseEventResult Entity::onMouseDown(const Ray &ray, int mouseButton, int timestamp) {
+	MouseEventResult ret;
+	ret.hit = false;
+	ret.blocked = false;
+    Number hitDistance;
+	
+	if(processInputEvents && enabled) {
+        hitDistance = ray.boxIntersect(bBox, getAnchorAdjustedMatrix());
+		if(hitDistance >= 0.0) {
+			if(customHitDetection(ray)) {
+				ret.hit = true;	
+				
+				Vector3 localCoordinate = Vector3(ray.origin.x,ray.origin.y,0);
+				Matrix4 inverse = getConcatenatedMatrix().Inverse();
+				localCoordinate = inverse * localCoordinate;			
+				
+				InputEvent *inputEvent = new InputEvent(Vector2(localCoordinate.x, localCoordinate.y*yAdjust), timestamp);
+                inputEvent->hitDistance = hitDistance;
+				inputEvent->mouseButton = mouseButton;
+				dispatchEvent(inputEvent, InputEvent::EVENT_MOUSEDOWN);
+				
+				if(timestamp - lastClickTicks < 400) {
+					InputEvent *inputEvent = new InputEvent(Vector2(localCoordinate.x, localCoordinate.y*yAdjust), timestamp);
+					inputEvent->mouseButton = mouseButton;
+					dispatchEvent(inputEvent, InputEvent::EVENT_DOUBLECLICK);
+				}
+				lastClickTicks = timestamp;			
+							
+				if(blockMouseInput) {
+					ret.blocked = true;
+				}
+			}
+		}
+		
+		for(int i=children.size()-1; i>=0; i--) {
+			MouseEventResult childRes = children[i]->onMouseDown(ray, mouseButton, timestamp);
+				if(childRes.hit)
+					ret.hit = true;
+				
+				if(childRes.blocked) {
+					ret.blocked = true;
+					break;
+				}			
+		}
+	}
+	return ret;
+}
+
+MouseEventResult Entity::onMouseUp(const Ray &ray, int mouseButton, int timestamp) {
+	MouseEventResult ret;
+	ret.hit = false;
+	ret.blocked = false;
+	Number hitDistance;
+    
+	if(processInputEvents && enabled) {
+	
+		Vector3 localCoordinate = Vector3(ray.origin.x,ray.origin.y,0);
+		Matrix4 inverse = getConcatenatedMatrix().Inverse();
+		localCoordinate = inverse * localCoordinate;			
+	
+		InputEvent *inputEvent = new InputEvent(Vector2(localCoordinate.x, localCoordinate.y*yAdjust), timestamp);
+		inputEvent->mouseButton = mouseButton;			
+
+        hitDistance = ray.boxIntersect(bBox, getAnchorAdjustedMatrix());
+		if(hitDistance >= 0.0) {
+			ret.hit = true;
+			inputEvent->hitDistance = hitDistance;
+			dispatchEvent(inputEvent, InputEvent::EVENT_MOUSEUP);
+			if(blockMouseInput) {
+				ret.blocked = true;
+			}
+		} else {
+			dispatchEvent(inputEvent, InputEvent::EVENT_MOUSEUP_OUTSIDE);
+		}
+		
+		for(int i=children.size()-1; i>=0; i--) {
+			MouseEventResult childRes = children[i]->onMouseUp(ray, mouseButton, timestamp);
+				if(childRes.hit)
+					ret.hit = true;
+				
+				if(childRes.blocked) {
+					ret.blocked = true;
+					break;
+				}			
+		}
+	}
+	return ret;}
+
+MouseEventResult Entity::onMouseMove(const Ray &ray, int timestamp) {
+	MouseEventResult ret;
+	ret.hit = false;
+	ret.blocked = false;
+    Number hitDistance;
+    
+	if(processInputEvents && enabled) {
+	
+		Vector3 localCoordinate = Vector3(ray.origin.x,ray.origin.y,0);
+		Matrix4 inverse = getConcatenatedMatrix().Inverse();
+		localCoordinate = inverse * localCoordinate;	
+        
+        hitDistance = ray.boxIntersect(bBox, getAnchorAdjustedMatrix());
+		if(hitDistance >= 0.0) {
+			//setColor(1.0, 0.0, 0.0, 1.0);
+			ret.hit = true;
+            InputEvent *inputEvent = new InputEvent(Vector2(localCoordinate.x, localCoordinate.y*yAdjust), timestamp);
+            inputEvent->hitDistance = hitDistance;
+			dispatchEvent(inputEvent, InputEvent::EVENT_MOUSEMOVE);
+			
+			if(!mouseOver) {
+                InputEvent *inputEvent = new InputEvent(Vector2(localCoordinate.x, localCoordinate.y*yAdjust), timestamp);
+                inputEvent->hitDistance = hitDistance;
+				dispatchEvent(inputEvent, InputEvent::EVENT_MOUSEOVER);
+				mouseOver = true;
+			}			
+			
+			if(blockMouseInput) {
+				ret.blocked = true;
+			}
+		} else {
+			if(mouseOver) {
+				dispatchEvent(new InputEvent(Vector2(localCoordinate.x, localCoordinate.y), timestamp), InputEvent::EVENT_MOUSEOUT);
+				mouseOver = false;
+			}		
+		}
+		
+		for(int i=children.size()-1; i>=0; i--) {
+			MouseEventResult childRes = children[i]->onMouseMove(ray, timestamp);
+				if(childRes.hit)
+					ret.hit = true;
+				
+				if(childRes.blocked) {
+					ret.blocked = true;
+					break;
+				}			
+		}
+	}
+	return ret;
+}
+
+MouseEventResult Entity::onMouseWheelUp(const Ray &ray, int timestamp) {
+	MouseEventResult ret;
+	ret.hit = false;
+	ret.blocked = false;
+    Number hitDistance;
+	
+	if(processInputEvents && enabled) {
+        hitDistance = ray.boxIntersect(bBox, getAnchorAdjustedMatrix());
+		if(hitDistance >= 0.0) {
+			ret.hit = true;	
+			
+			Vector3 localCoordinate = Vector3(ray.origin.x,ray.origin.y,0);
+			Matrix4 inverse = getConcatenatedMatrix().Inverse();
+			localCoordinate = inverse * localCoordinate;			
+			
+			InputEvent *inputEvent = new InputEvent(Vector2(localCoordinate.x, localCoordinate.y*yAdjust), timestamp);
+            inputEvent->hitDistance = hitDistance;
+			dispatchEvent(inputEvent, InputEvent::EVENT_MOUSEWHEEL_UP);
+												
+			if(blockMouseInput) {
+				ret.blocked = true;
+			}
+		}
+		
+		for(int i=children.size()-1; i>=0; i--) {
+			MouseEventResult childRes = children[i]->onMouseWheelUp(ray, timestamp);
+				if(childRes.hit)
+					ret.hit = true;
+				
+				if(childRes.blocked) {
+					ret.blocked = true;
+					break;
+				}			
+		}
+	}
+	return ret;
+}
+
+MouseEventResult Entity::onMouseWheelDown(const Ray &ray, int timestamp) {
+	MouseEventResult ret;
+	ret.hit = false;
+	ret.blocked = false;
+	Number hitDistance;
+    
+	if(processInputEvents && enabled) {
+        hitDistance = ray.boxIntersect(bBox, getAnchorAdjustedMatrix());
+		if(hitDistance >= 0.0) {
+			ret.hit = true;	
+			
+			Vector3 localCoordinate = Vector3(ray.origin.x,ray.origin.y,0);
+			Matrix4 inverse = getConcatenatedMatrix().Inverse();
+			localCoordinate = inverse * localCoordinate;			
+			
+			InputEvent *inputEvent = new InputEvent(Vector2(localCoordinate.x, localCoordinate.y*yAdjust), timestamp);
+            inputEvent->hitDistance = hitDistance;
+			dispatchEvent(inputEvent, InputEvent::EVENT_MOUSEWHEEL_DOWN);
+												
+			if(blockMouseInput) {
+				ret.blocked = true;
+			}
+		}
+		
+		for(int i=children.size()-1; i>=0; i--) {
+			MouseEventResult childRes = children[i]->onMouseWheelDown(ray, timestamp);
+				if(childRes.hit)
+					ret.hit = true;
+				
+				if(childRes.blocked) {
+					ret.blocked = true;
+					break;
+				}			
+		}
+	}
+	return ret;
+}

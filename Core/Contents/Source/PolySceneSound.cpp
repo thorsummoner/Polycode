@@ -27,7 +27,7 @@ THE SOFTWARE.
 
 using namespace Polycode;
 
-SceneSoundListener::SceneSoundListener() : SceneEntity() {
+SceneSoundListener::SceneSoundListener() : Entity() {
 
 }
 SceneSoundListener::~SceneSoundListener() {
@@ -43,11 +43,35 @@ void SceneSoundListener::Update() {
 	CoreServices::getInstance()->getSoundManager()->setListenerOrientation(direction, upVector);
 }
 
+void SceneSound::setLoopOnLoad(bool val) {
+    loopOnLoad = val;
+}
 
-SceneSound::SceneSound(const String& fileName, Number referenceDistance, Number maxDistance, bool directionalSound) : SceneEntity() {
+bool SceneSound::getLoopOnLoad() {
+    return loopOnLoad;
+}
+
+
+Entity *SceneSound::Clone(bool deepClone, bool ignoreEditorOnly) const {
+    SceneSound *newSound = new SceneSound(sound->getFileName(), sound->getReferenceDistance(), sound->getMaxDistance(), directionalSound);
+    applyClone(newSound, deepClone, ignoreEditorOnly);
+    return newSound;
+}
+
+void SceneSound::applyClone(Entity *clone, bool deepClone, bool ignoreEditorOnly) const {
+    Entity::applyClone(clone, deepClone, ignoreEditorOnly);
+    SceneSound *cloneSound = (SceneSound*) clone;
+    cloneSound->setLoopOnLoad(loopOnLoad);
+    cloneSound->getSound()->setPositionalProperties(sound->getReferenceDistance(), sound->getMaxDistance());
+    cloneSound->setDirectionalSound(directionalSound);
+    cloneSound->getSound()->setVolume(sound->getVolume());
+    cloneSound->getSound()->setPitch(sound->getPitch());
+}
+
+SceneSound::SceneSound(const String& fileName, Number referenceDistance, Number maxDistance, bool directionalSound) : Entity() {
 
 	this->directionalSound = directionalSound;
-	
+	loopOnLoad = false;
 	sound = new Sound(fileName);
 	sound->setIsPositional(true);
 	sound->setPositionalProperties(referenceDistance, maxDistance);
@@ -55,6 +79,13 @@ SceneSound::SceneSound(const String& fileName, Number referenceDistance, Number 
 
 SceneSound::~SceneSound() {
 	delete sound;
+}
+
+bool SceneSound::isDirectionalSound() const {
+    return directionalSound;
+}
+void SceneSound::setDirectionalSound(bool val) {
+    directionalSound = val;
 }
 
 void SceneSound::Update() {

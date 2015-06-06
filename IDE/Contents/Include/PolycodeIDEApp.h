@@ -15,13 +15,15 @@
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR  OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
  */
 
 #if defined(__APPLE__) && defined(__MACH__)
 #import "PolycodeView.h"
+#elif defined(_WINDOWS)
+#include "PolycodeWinIDEView.h"
 #else
 #include "PolycodeView.h"
 #endif
@@ -36,11 +38,12 @@
 
 #include "PolycodeImageEditor.h"
 #include "PolycodeMaterialEditor.h"
-#include "PolycodeScreenEditor.h"
 #include "PolycodeFontEditor.h"
 #include "PolycodeTextEditor.h"
 #include "PolycodeProjectEditor.h"
 #include "PolycodeSpriteEditor.h"
+#include "PolycodeMeshEditor.h"
+#include "PolycodeEntityEditor.h"
 
 #include "PolycodeToolLauncher.h"
 
@@ -51,7 +54,11 @@ using namespace Polycode;
 
 class PolycodeIDEApp : public EventDispatcher {
 public:
+#ifdef _WINDOWS
+	PolycodeIDEApp(PolycodeWinIDEView *view);
+#else
 	PolycodeIDEApp(PolycodeView *view);
+#endif
 	~PolycodeIDEApp();
 	
 	void handleEvent(Event *event);	
@@ -78,6 +85,7 @@ public:
 	void openDocs();
 	
 	void addFiles();
+	void importAssets();
 	
 	void newGroup();	
 	void openProject();
@@ -90,6 +98,11 @@ public:
 	void exportProject();
 	void toggleConsole();
 	void showSettings();
+	
+	void createNewTab();
+	void closeTab();
+	void showNextTab();
+	void showPreviousTab();
 	
 	void removeEditor(PolycodeEditor *editor);
 	
@@ -117,17 +130,23 @@ protected:
 	bool quittingApp;
 	bool runNextFrame;
 
+	Object configFile;
+
 	bool willRunProject;
 	PolycodeFrame *frame;
 	
 	PolycodeEditorManager *editorManager;
-	PolycodeProjectManager *projectManager;
-	
+	PolycodeProjectManager *projectManager;	
 	PolycodeRemoteDebugger *debugger;
 
 	UIMenuBar *menuBar;
 	
 private:
+
+	void applyFinalConfig();
+
+	std::vector<ObjectEntry*> projectsToOpen;
+
 	void doCloseProject();
 	void doCloseFiles(std::vector<PolycodeEditor*> editors);
 	

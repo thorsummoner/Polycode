@@ -38,15 +38,18 @@ namespace Polycode {
 	class _PolyExport SceneLabel : public ScenePrimitive {
 		public:
 			
-			/**
-			* Constructor.
-			* @param fontName Name of a registered font to use. @see FontManager for info on how to register fonts.
-			* @param text Text to display.
-			* @param size Size in pixels.
-			* @param scale Scale to multiply pixel size by for the actual world size of the label.
-			* @param Anti-aliasing mode. Can be Label::ANTIALIAS_FULL or Label::ANTIALIAS_NONE.
-			*/			
-			SceneLabel(const String& fontName, const String& text, int size, Number scale, int amode, bool premultiplyAlpha = false);
+			
+			SceneLabel(const String& text, int size, const String& fontName = "sans", int amode = 0, Number actualHeight = 0.0, bool premultiplyAlpha = false);
+			
+			String getText();
+        
+            void setLabelActualHeight(Number actualHeight);
+            Number getLabelActualHeight();
+			
+			void Render();
+
+            int getTextWidthForString(String text);
+        
 			virtual ~SceneLabel();			
 		
 			/**
@@ -54,14 +57,26 @@ namespace Polycode {
 			* @param newText New text to display.
 			*/ 
 			void setText(const String& newText);
-			
-			Label *getLabel();
-			
-		protected:
+        
+            virtual Entity *Clone(bool deepClone, bool ignoreEditorOnly) const;
+            virtual void applyClone(Entity *clone, bool deepClone, bool ignoreEditorOnly) const;
 			
 			void updateFromLabel();
+        
+			Label *getLabel();
 			
-			Number scale;
+			bool positionAtBaseline;
+			
+			static Vector3 defaultAnchor;
+			static bool defaultPositionAtBaseline;
+			static bool defaultSnapToPixels;
+			static bool createMipmapsForLabels;
+						
+		protected:
+			
+			     
+			Number actualHeight;
+            Number labelScale;
 			Label *label;
 	};
 }

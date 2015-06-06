@@ -39,7 +39,7 @@ using namespace Polycode;
 
 #define CURVE_SIZE 160.0
 
-class EditPoint : public ScreenEntity {
+class EditPoint : public Entity {
 	public:
 		EditPoint(BezierPoint *point, unsigned int type);
 		~EditPoint();
@@ -51,21 +51,20 @@ class EditPoint : public ScreenEntity {
 		
 		void setMode(unsigned int mode);
 
-		void limitPoint(ScreenImage *point);
+		void limitPoint(UIRect *point);
 								
-		ScreenImage *pointHandle;
+		UIRect *pointHandle;
+		UIRect *controlHandle1;
+		UIRect *controlHandle2;
 		
-		ScreenImage *controlHandle1;
-		ScreenImage *controlHandle2;
-		
-		ScreenLine *connectorLine1;
-		ScreenLine *connectorLine2;
+		SceneLine *connectorLine1;
+		SceneLine *connectorLine2;
 				
 		static const int TYPE_START_POINT = 0;		
 		static const int TYPE_POINT = 1;
 		static const int TYPE_END_POINT = 2;				
 		
-		ScreenImage *draggingPoint;
+		UIImage *draggingPoint;
 		bool dragging;
 		Vector2 basePosition;
 		Vector2 basePointPosition;
@@ -97,13 +96,12 @@ class EditCurve : public UIElement {
 		void handleEvent(Event *event);
 		
 		BezierCurve *targetCurve;
-		ScreenMesh *visMesh;
-		Polycode::Polygon *poly;	
+		SceneMesh *visMesh;
 		
 		EditPoint *pointToRemove;
 		UIElement *pointsBase;
 		vector<EditPoint*> points;
-		
+
 		unsigned int mode;
 };
 
@@ -125,7 +123,7 @@ class CurveEditor : public UIWindow {
 		UIImageButton *addButton;
 		UIImageButton *removeButton;
 				
-		ScreenImage	*selectorImage;
+		UIImage	*selectorImage;
 		
 		static const int MODE_SELECT = 0;		
 		static const int MODE_ADD = 1;
@@ -134,7 +132,7 @@ class CurveEditor : public UIWindow {
 		UITreeContainer *treeContainer;
 		
 		unsigned int mode;
-		ScreenImage *bg;
+		UIRect *bg;
 		
 		EditCurve *selectedCurve;
 		std::vector<EditCurve*> curves;
@@ -142,19 +140,166 @@ class CurveEditor : public UIWindow {
 
 class EditorHolder : public UIElement {
 	public:
-		EditorHolder();
+		EditorHolder(PolycodeProject *project, PolycodeEditorManager *editorManager, EditorHolder *parentHolder);
 		~EditorHolder();
+		
+		ObjectEntry *getEditorHolderConfig();
+		void applyConfig(ObjectEntry *entry);
+		
+        void activateEditor(bool val);
+    
+		void handleEvent(Event *event);
+		void Resize(Number width, Number height);		
+		
+		void makeVSplit();
+		void makeHSplit();
+				
+		void _mergeSides(EditorHolder *mainHolder);
+		void mergeSides(EditorHolder *mainHolder);
+		
+		void Update();
+		void setActive(bool val);
+				
+		void updateFileSelector();
+		
+		void setEditor(PolycodeEditor *newEditor);		
+		PolycodeEditor *getEditor();
+		
+						
+	protected:
+	
+		PolycodeProject *project;
+	
+		EditorHolder *parentHolder;
+		PolycodeEditorManager *editorManager;
+		
+		PolycodeEditor *currentEditor;
+		EditorHolder *editorToMerge;
+		
+		UIElement *holderBar;
+		
+		UIRect *headerBg;
+		UIImageButton *vSplitButton;
+		UIImageButton *hSplitButton;
+		UIImageButton *mergeSplitButton;
+		
+		UIVSizer *vSizer;
+		UIHSizer *hSizer;	
+		
+		EditorHolder *firstChildHolder;
+		EditorHolder *secondChildHolder;
+		
+		UIImageButton *closeFileButton;		
+		UIComboBox *currentFileSelector;
+		
+		bool displayFilePathInSelector;
+		bool initialUpdate;
+		bool isActive;
+};
+
+class PolycodeProjectTab : public UIElement {
+	public:
+		PolycodeProjectTab(String caption, PolycodeProject *project, PolycodeEditorManager *editorManager);
+		~PolycodeProjectTab();
+		
+		void handleEvent(Event *event);
+		
+		EditorHolder *getEditorHolder();
+		void Resize(Number width, Number height);				
+		void showEditor(PolycodeEditor *editor);
+		
+		ObjectEntry *getTabConfig();
+		void applyTabConfig(ObjectEntry *tabEntry);
+		
+		void setActive(bool val);
+		bool isActive();
+		
+		String getTabName();
+		void setTabName(String newName);		
+		
+		PolycodeProjectBrowser *getProjectBrowser();
+			
+	protected:
+	
+		bool active;
+		String tabName;
+		UIHSizer *mainSizer;	
+		PolycodeProjectBrowser *projectBrowser;
+		EditorHolder *editorHolder;
+		PolycodeEditorManager *editorManager;
+};
+
+class PolycodeTabButton : public UIElement {
+	public:
+		PolycodeTabButton(PolycodeProjectTab *tab);
+		~PolycodeTabButton();
+
+		void setActive(bool val);
+		void handleEvent(Event *event);
+		void updateLabel();
+
+		PolycodeProjectTab *getTab();		
+	protected:
+		PolycodeProjectTab *tab;
+		UIImage *bgRect;
+		UILabel *tabLabel;
+		UIMenu *menu;
+		
+		TextInputPopup *renamePopup;
+		
+		UIImageButton *closeButton;
+	
+};
+
+class PolycodeProjectFrame : public UIElement {
+	public:
+		PolycodeProjectFrame(PolycodeProject *project, PolycodeEditorManager *editorManager);
+		~PolycodeProjectFrame();
+		
+		PolycodeProject *getProject();
+		
+		PolycodeProjectTab *addNewTab(String caption = "New Tab");
+		
+		ObjectEntry *getFrameConfig();
+		
+		void showTab(PolycodeProjectTab *tab);
+		void closeTab(PolycodeProjectTab *tab);
+		void showNextTab();
+		void showPreviousTab();
+		
+		void Update();
+								
+		PolycodeProjectTab *getActiveTab();
+		void handleEvent(Event *event);
+		
+		void restructTabs();
 		
 		void Resize(Number width, Number height);
 		
-		PolycodeEditor *currentEditor;
+		EditorHolder *lastActiveEditorHolder;
 		
+		PolycodeProjectTab *getTabAtIndex(unsigned int index);
+		unsigned int getNumTabs();
+		
+	protected:
+	
+		PolycodeProject *project;
+		
+		UIElement *tabButtonAnchor;		
+		UIImageButton *newTabButton;
+	
+		PolycodeEditorManager *editorManager;
+		PolycodeProjectTab *activeTab;
+		std::vector<PolycodeProjectTab*> tabs;		
+		std::vector<PolycodeTabButton*> tabButtons;
+		
+		PolycodeProjectTab *tabToClose;
 };
 
-class PolycodeFrame : public ScreenEntity {
+class PolycodeFrame : public UIElement {
 public:
 	
-	PolycodeFrame();
+	PolycodeFrame(PolycodeEditorManager *editorManager);
 	~PolycodeFrame();
 	
 	void Resize(int x, int y);
@@ -166,48 +311,53 @@ public:
 	
 	void showFileBrowser(String baseDir, bool foldersOnly, std::vector<String> extensions, bool allowMultiple);
 
-	void handleEvent(Event *event);
-	
-	void addEditor(PolycodeEditor *editor);
-	void removeEditor(PolycodeEditor *editor);
-		
-	void showEditor(PolycodeEditor *editor);
-	
+	void handleEvent(Event *event);	
 	void showAssetBrowser(std::vector<String> extensions);
+
+	void showAssetBrowserForPools(std::vector<ResourcePool*> pools, int resourceType);
+    
+	PolycodeProjectBrowser *getCurrentProjectBrowser();
+	PolycodeProjectFrame *getActiveProjectFrame();	
+	PolycodeProjectFrame *getProjectFrame(PolycodeProject *project);
+	
+	void removeProjectFrame(PolycodeProject *project);
+	
+	TextInputPopup *showTextInput(String caption, String action, String value);
+	
+	ObjectEntry *getFrameConfigForProject(PolycodeProject *project);
 	
 	void toggleConsole();
 	void showConsole();
 	void hideConsole();
 	
-	void showCurveEditor();
+	PolycodeProjectFrame *createProjectFrame(PolycodeProject *project);
+	void switchToProjectFrame(PolycodeProjectFrame *projectFrame);
 	
-	PolycodeProjectBrowser *getProjectBrowser();
+	UIVSizer *getConsoleSizer();
+	
+	void showCurveEditor();
 	
 	NewProjectWindow *newProjectWindow;	
 	ExampleBrowserWindow *exampleBrowserWindow;
 	NewFileWindow *newFileWindow;
 	ExportProjectWindow *exportProjectWindow;
-	SettingsWindow *settingsWindow;
-	
+	SettingsWindow *settingsWindow;	
 	AssetBrowser *assetBrowser;
 	
 	TextInputPopup *textInputPopup;
 	YesNoPopup *yesNoPopup;
+    MessagePopup *messagePopup;
 	YesNoCancelPopup *yesNoCancelPopup;
 	
-	ScreenEntity *welcomeEntity;	
-	PolycodeProjectBrowser *projectBrowser;
+	Entity *welcomeEntity;	
 	PolycodeEditorManager *editorManager;
 		
 	UIImageButton *playButton;
 	UIImageButton *stopButton;
-		
-	UIHSizer *mainSizer;
-	
-	PolycodeConsole *console;
-	
+			
 	PolycodeProjectManager *projectManager;
 		
+	PolycodeConsole *console;	
 	CurveEditor *curveEditor;
 	
 	UIElement *modalRoot;
@@ -217,52 +367,46 @@ public:
 	UIWindow *aboutWindow;
 	UIButton *aboutOKButton;
 	
-	UIImageButton *closeFileButton;
+	AssetImporterWindow *assetImporterWindow;
 	
 	void updateFileSelector();
-	void showNextEditor();
-	void showPreviousEditor();
+	
+	bool isShowingConsole();
+	Number getConsoleSize();
 	
 private:
 	
-	int frameSizeX;
-	int frameSizeY;
-	
-	bool willHideModal;
-	
-	bool showingConsole;
 	Number consoleSize;
+				
+	UIVSizer *consoleSizer;
+	
+	bool willHideModal;	
+	bool showingConsole;
 
-	ScreenShape *fileDialogBlocker;
+	UIRect *fileDialogBlocker;
 
-	ScreenShape *topBarBg;
-	ScreenImage *logo;	
-	ScreenImage *resizer;	
+	UIRect *topBarBg;
+	UIImage *logo;	
+	UIImage *resizer;	
 
 	OSFileEntry draggedFile;
-	ScreenEntity *dragEntity;
-	ScreenLabel *dragLabel;
+	Entity *dragEntity;
+	UILabel *dragLabel;
 	bool isDragging;
 	
-	ScreenLabel *currentProjectTitle;
-	UIComboBox *currentFileSelector;
+	UIComboBox *currentProjectSelector;	
+	UIImage *welcomeImage;	
 	
-	ScreenImage *welcomeImage;	
-	
-	
-	EditorHolder *editorHolder;
-	
-
-	vector<PolycodeEditor*> editors;
-	
-	ScreenShape *modalBlocker;
+	UIRect *modalBlocker;
 	UIWindow *modalChild;		
 	
-	UIVSizer *consoleSizer;
 	
 	UIButton *newProjectButton;
 	UIButton *examplesButton;
 	
 	bool displayFilePathInSelector;
+	
+	PolycodeProjectFrame* activeProjectFrame;
+	std::vector<PolycodeProjectFrame*> projectFrames;
 
 };

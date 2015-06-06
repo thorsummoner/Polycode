@@ -22,9 +22,9 @@
 
 #pragma once
 #include "PolyGlobals.h"
-#include "PolyScreenLabel.h"
-#include "PolyScreenShape.h"
-#include "PolyScreenEntity.h"
+#include "PolySceneLabel.h"
+#include "PolyScenePrimitive.h"
+#include "PolyEntity.h"
 #include "PolyUIEvent.h"
 #include "PolyUIBox.h"
 #include "PolyUIMenu.h"
@@ -49,14 +49,14 @@ namespace Polycode {
 	class _PolyExport UIMenuBarEntry : public UIElement {
 		public:
 			UIMenuBarEntry(String name);
-			~UIMenuBarEntry();		
+			virtual ~UIMenuBarEntry();		
 			void addItem(String name, String code, PolyKEY shortCut1 = KEY_UNKNOWN, PolyKEY shortCut2 = KEY_UNKNOWN);
 
 			void Select();
 			void Deselect();
 
-			ScreenShape *bg;
-			ScreenLabel *label;
+			UIRect *bg;
+			SceneLabel *label;
 
 			std::vector<UIMenuBarEntryItem> items;
 
@@ -65,7 +65,7 @@ namespace Polycode {
 	class _PolyExport UIMenuBar : public UIElement {
 		public:
 			UIMenuBar(int width, UIGlobalMenu *globalMenu);
-			~UIMenuBar();
+			virtual ~UIMenuBar();
 
 			void handleEvent(Event *event);	
 
@@ -82,7 +82,7 @@ namespace Polycode {
 			bool holdingMouse;
 
 			String selectedItem;
-			ScreenShape *bgShape;
+			UIRect *bgShape;
 			std::vector<UIMenuBarEntry*> entries;
 			UIMenuBarEntry *currentEntry;
 	};

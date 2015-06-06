@@ -34,12 +34,12 @@ namespace Polycode {
 	class Config;
 	class FontManager;
 	class SceneManager;
-	class ScreenManager;
 	class TimerManager;
 	class TweenManager;
 	class ResourceManager;
 	class SoundManager;
 	class Core;
+    class CoreInput;
 	class CoreMutex;
 	class Logger;
 	
@@ -66,6 +66,7 @@ namespace Polycode {
 			Renderer *getRenderer();
 			
 			void Update(int elapsed);
+            void fixedUpdate();
 			void Render();
 			
 			void setCore(Core *core);
@@ -81,6 +82,13 @@ namespace Polycode {
 			* @see Core
 			*/																														
 			Core *getCore();
+        
+            /**
+             * Returns the core input.
+             * @return Core input.
+             * @see CoreInput
+             */
+            CoreInput *getInput();
 			
 			void handleEvent(Event *event);
 		
@@ -98,12 +106,6 @@ namespace Polycode {
 			*/
 			MaterialManager *getMaterialManager();
 			
-			/**
-			* Returns the screen manager. The screen manager is responsible for maintaining and rendering 2D screens.
-			* @return Screen Manager
-			* @see ScreenManager
-			*/			
-			ScreenManager *getScreenManager();
 			
 			/**
 			* Returns the scene manager. The screen manager is responsible for maintaining and rendering 3D scenes.
@@ -161,9 +163,7 @@ namespace Polycode {
 			Config *getConfig();
 			
 					
-			~CoreServices();
-		
-			void *focusedChild;
+			~CoreServices();		
 			
 		protected:
 		
@@ -182,7 +182,6 @@ namespace Polycode {
 			Core *core;
 			Config *config;
 			MaterialManager *materialManager;
-			ScreenManager *screenManager;		
 			SceneManager *sceneManager;
 			Logger *logger;
 			TimerManager *timerManager;
@@ -192,4 +191,8 @@ namespace Polycode {
 			FontManager *fontManager;
 			Renderer *renderer;
 	};
+    
+
+    CoreServices *Services();
+    
 }

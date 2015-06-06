@@ -30,11 +30,12 @@ namespace Polycode {
 	class _PolyExport UIHScrollBar : public UIElement {
 	public:
 		UIHScrollBar(Number width, Number height, Number initialRatio);
-		~UIHScrollBar();
+		virtual ~UIHScrollBar();
 		
 		void Update();
 		Number getScrollValue();
 		void handleEvent(Event *event);
+		void Resize(int newWidth);
 		
 		void scrollTo(Number scrollValue);
 		void Scroll(Number amount);

@@ -19,6 +19,7 @@ SET(polycore_SRCS
     Source/PolyEventHandler.cpp
     Source/PolyFixedShader.cpp
     Source/PolyFont.cpp
+	Source/PolyFontGlyphSheet.cpp
     Source/PolyFontManager.cpp
     Source/PolyGLCubemap.cpp
     Source/PolyGLRenderer.cpp
@@ -37,44 +38,32 @@ SET(polycore_SRCS
     Source/PolyMesh.cpp
     Source/PolyModule.cpp
     Source/PolyObject.cpp
-    Source/PolyParticle.cpp
     Source/PolyParticleEmitter.cpp
     Source/PolyPerlin.cpp
-    Source/PolyPolygon.cpp
     Source/PolyQuaternion.cpp
     Source/PolyQuaternionCurve.cpp
     Source/PolyRectangle.cpp
     Source/PolyRenderer.cpp
+    Source/PolyRenderDataArray.cpp
     Source/PolyResource.cpp
     Source/PolyResourceManager.cpp
     Source/PolyScene.cpp
-    Source/PolySceneEntity.cpp
     Source/PolySceneLabel.cpp
     Source/PolySceneLight.cpp
     Source/PolySceneLine.cpp
     Source/PolySceneManager.cpp
     Source/PolySceneMesh.cpp
     Source/PolyScenePrimitive.cpp
+    Source/PolySceneImage.cpp
     Source/PolySceneRenderTexture.cpp
     Source/PolySceneSound.cpp
-    Source/PolyScreen.cpp
-    Source/PolyScreenEntity.cpp
-    Source/PolyScreenEvent.cpp
-    Source/PolyScreenImage.cpp
-    Source/PolyScreenLabel.cpp
-    Source/PolyScreenLine.cpp
-    Source/PolyScreenManager.cpp
-    Source/PolyScreenMesh.cpp
-    Source/PolyScreenShape.cpp
-    Source/PolyScreenSound.cpp
-    Source/PolyScreenSprite.cpp
-    Source/PolyScreenEntityInstance.cpp
     Source/PolyShader.cpp
     Source/PolySkeleton.cpp
     Source/PolySound.cpp
     Source/PolySoundManager.cpp
     Source/PolyString.cpp
-    Source/PolyTexture.cpp
+	Source/PolyTextMesh.cpp
+	Source/PolyTexture.cpp
     Source/PolyThreaded.cpp
     Source/PolyTimer.cpp
     Source/PolyTimerManager.cpp
@@ -82,7 +71,7 @@ SET(polycore_SRCS
     Source/PolyTweenManager.cpp
     Source/PolyVector2.cpp
     Source/PolyVector3.cpp
-    Source/PolyVertex.cpp
+    Source/PolyVector4.cpp
     Source/tinystr.cpp
     Source/tinyxml.cpp
     Source/tinyxmlerror.cpp
@@ -91,6 +80,11 @@ SET(polycore_SRCS
     Source/PolyPeer.cpp
     Source/PolyClient.cpp
     Source/PolyServer.cpp
+    Source/PolyRay.cpp
+    Source/PolySceneSprite.cpp
+    Source/PolySceneEntityInstance.cpp
+    Source/rgbe.cpp
+    Include/stb_image.h
 )
 
 SET(polycore_HDRS
@@ -112,6 +106,7 @@ SET(polycore_HDRS
     Include/PolyEventHandler.h
     Include/PolyFixedShader.h
     Include/PolyFont.h
+	Include/PolyFontGlyphSheet.h
     Include/PolyFontManager.h
     Include/PolyGLCubemap.h
     Include/PolyGLHeaders.h
@@ -134,16 +129,14 @@ SET(polycore_HDRS
     Include/PolyModule.h
     Include/PolyObject.h
     Include/PolyParticleEmitter.h
-    Include/PolyParticle.h
     Include/PolyPerlin.h
-    Include/PolyPolygon.h
     Include/PolyQuaternionCurve.h
     Include/PolyQuaternion.h
     Include/PolyRectangle.h
     Include/PolyRenderer.h
+    Include/PolyRenderDataArray.h
     Include/PolyResource.h
     Include/PolyResourceManager.h
-    Include/PolySceneEntity.h
     Include/PolyScene.h
     Include/PolySceneLabel.h
     Include/PolySceneLight.h
@@ -151,25 +144,15 @@ SET(polycore_HDRS
     Include/PolySceneManager.h
     Include/PolySceneMesh.h
     Include/PolyScenePrimitive.h
+    Include/PolySceneImage.h
     Include/PolySceneRenderTexture.h
     Include/PolySceneSound.h
-    Include/PolyScreenEntity.h
-    Include/PolyScreenEvent.h
-    Include/PolyScreen.h
-    Include/PolyScreenImage.h
-    Include/PolyScreenLabel.h
-    Include/PolyScreenLine.h
-    Include/PolyScreenManager.h
-    Include/PolyScreenMesh.h
-    Include/PolyScreenShape.h
-    Include/PolyScreenSound.h
-    Include/PolyScreenSprite.h
-    Include/PolyScreenEntityInstance.h
     Include/PolyShader.h
     Include/PolySkeleton.h
     Include/PolySound.h
     Include/PolySoundManager.h
     Include/PolyString.h
+	Include/PolyTextMesh.h
     Include/PolyTexture.h
     Include/PolyThreaded.h
     Include/PolyTimer.h
@@ -178,7 +161,7 @@ SET(polycore_HDRS
     Include/PolyTweenManager.h
     Include/PolyVector2.h
     Include/PolyVector3.h
-    Include/PolyVertex.h
+    Include/PolyVector4.h
     Include/tinystr.h
     Include/tinyxml.h
     Include/PolySocket.h
@@ -186,6 +169,11 @@ SET(polycore_HDRS
     Include/PolyClient.h
     Include/PolyServer.h
     Include/PolyServerWorld.h
+    Include/PolyRay.h
+    Include/PolySceneSprite.h
+    Include/PolySceneEntityInstance.h
+    Include/rgbe.h
+    Include/stb_image.h
 )
 
 SET(CMAKE_DEBUG_POSTFIX "_d")

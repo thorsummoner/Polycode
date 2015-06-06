@@ -31,6 +31,10 @@ PolycodeEditorManager::~PolycodeEditorManager() {
 	
 }
 
+void PolycodeEditorManager::setProjectManager(PolycodeProjectManager *projectManager) {
+	this->projectManager = projectManager;
+}
+
 PolycodeEditorFactory *PolycodeEditorManager::getEditorFactoryForExtension(String extension) {
 	for(int i=0;i < editorFactories.size(); i++) {
 		PolycodeEditorFactory *factory = editorFactories[i];
@@ -63,6 +67,28 @@ void PolycodeEditorManager::destroyEditor(PolycodeEditor* editor) {
 			return;
 		}
 	}
+}
+
+PolycodeEditor *PolycodeEditorManager::openFile(OSFileEntry file) {
+
+	if(!OSBasics::fileExists(file.fullPath)) {
+		return NULL;
+	}
+
+	PolycodeEditor *editor = getEditorForPath(file.fullPath);	
+	if(editor) {
+		return editor;
+	} else {
+		editor = createEditorForExtension(file.extension);
+		if(editor) {
+			editor->parentProject = projectManager->getActiveProject();
+			if(!editor->openFile(file)) {
+				delete editor;
+				editor = NULL;
+			}
+		}
+	}
+	return editor;
 }
 
 bool PolycodeEditorManager::hasUnsavedFiles() {
@@ -108,6 +134,16 @@ void PolycodeEditorManager::setCurrentEditor(PolycodeEditor *editor, bool sendCh
 	}
 }
 
+std::vector<PolycodeEditor*> PolycodeEditorManager::getOpenEditorsForProject(PolycodeProject *project) {
+	std::vector<PolycodeEditor*> retVector;
+
+	for(int i=0; i < openEditors.size(); i++) {
+		if(openEditors[i]->parentProject == project) {
+			retVector.push_back(openEditors[i]);
+		}
+	}
+	return retVector;
+}
 
 PolycodeEditor *PolycodeEditorManager::getEditorForPath(String path) {
 	for(int i=0; i < openEditors.size();i++) {

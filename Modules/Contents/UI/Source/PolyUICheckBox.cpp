@@ -25,13 +25,15 @@
 #include "PolyLabel.h"
 #include "PolyCoreServices.h"
 #include "PolyConfig.h"
+#include "PolyRenderer.h"
 
 using namespace Polycode;
 
 UICheckBox::UICheckBox(String caption, bool checked) : UIElement() {
 
 	Config *conf = CoreServices::getInstance()->getConfig();	
-	
+	Number uiScale = conf->getNumericValue("Polycode", "uiScale");
+    
 	String fontName = conf->getStringValue("Polycode", "uiCheckBoxFont");
 	int fontSize = conf->getNumericValue("Polycode", "uiCheckBoxFontSize");	
 	String checkImage = conf->getStringValue("Polycode", "uiCheckBoxCheckedImage");
@@ -41,14 +43,16 @@ UICheckBox::UICheckBox(String caption, bool checked) : UIElement() {
 	
 	this->checked = checked;
 	
-	buttonImageChecked = new ScreenImage(checkImage);
+	buttonImageChecked = new UIImage(checkImage);
+    buttonImageChecked->Resize(buttonImageChecked->getWidth() / uiScale, buttonImageChecked->getHeight() / uiScale);
 	buttonImageChecked->visible = checked;
 
-	buttonImageUnchecked = new ScreenImage(uncheckImage);
+	buttonImageUnchecked = new UIImage(uncheckImage);
 	buttonImageUnchecked->visible = !checked;
+    buttonImageUnchecked->Resize(buttonImageUnchecked->getWidth() / uiScale, buttonImageUnchecked->getHeight() / uiScale);
 	
-	captionLabel = new ScreenLabel(caption, fontSize, fontName, Label::ANTIALIAS_FULL);
-	
+	captionLabel = new UILabel(caption, fontSize, fontName, Label::ANTIALIAS_FULL);
+	captionLabel->setBlendingMode(Renderer::BLEND_MODE_NORMAL);    
 	addChild(captionLabel);
 	captionLabel->setPosition(buttonImageChecked->getWidth() + checkboxTextOffsetX, checkboxTextOffsetY);
 	
@@ -65,8 +69,8 @@ UICheckBox::UICheckBox(String caption, bool checked) : UIElement() {
 	captionLabel->addEventListener(this, InputEvent::EVENT_MOUSEDOWN);
 	captionLabel->processInputEvents = true;
 	
-	height = buttonImageUnchecked->getHeight();
-	width = buttonImageUnchecked->getWidth() + captionLabel->getWidth() + checkboxTextOffsetX;
+	setHeight(buttonImageUnchecked->getHeight());
+	setWidth(buttonImageUnchecked->getWidth() + captionLabel->getWidth() + checkboxTextOffsetX);
 }
 
 String UICheckBox::getCaptionLabel() {

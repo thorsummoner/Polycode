@@ -80,7 +80,7 @@ void Core::getScreenInfo(int *width, int *height, int *hz) {
 	if (hz) *hz = 0;
 }
 
-SDLCore::SDLCore(PolycodeView *view, int _xRes, int _yRes, bool fullScreen, bool vSync, int aaLevel, int anisotropyLevel, int frameRate, int monitorIndex) : Core(_xRes, _yRes, fullScreen, vSync, aaLevel, anisotropyLevel, frameRate, monitorIndex) {
+SDLCore::SDLCore(PolycodeView *view, int _xRes, int _yRes, bool fullScreen, bool vSync, int aaLevel, int anisotropyLevel, int frameRate, int monitorIndex, bool retinaSupport) : Core(_xRes, _yRes, fullScreen, vSync, aaLevel, anisotropyLevel, frameRate, monitorIndex) {
 
 	this->resizableWindow = view->resizable;
 
@@ -133,7 +133,7 @@ SDLCore::SDLCore(PolycodeView *view, int _xRes, int _yRes, bool fullScreen, bool
 	CoreServices::getInstance()->installModule(new GLSLShaderModule());	
 }
 
-void SDLCore::setVideoMode(int xRes, int yRes, bool fullScreen, bool vSync, int aaLevel, int anisotropyLevel) {
+void SDLCore::setVideoMode(int xRes, int yRes, bool fullScreen, bool vSync, int aaLevel, int anisotropyLevel, bool retinaSupport) {
 	this->xRes = xRes;
 	this->yRes = yRes;
 	this->fullScreen = fullScreen;
@@ -313,7 +313,7 @@ void SDLCore::Render() {
 	SDL_GL_SwapBuffers();
 }
 
-bool SDLCore::Update() {
+bool SDLCore::systemUpdate() {
 	if(!running)
 		return false;
 	doSleep();	
@@ -497,6 +497,11 @@ String SDLCore::openFolderPicker() {
 vector<String> SDLCore::openFilePicker(vector<CoreFileExtension> extensions, bool allowMultiple) {
 	vector<String> r;
 	return r;
+}
+
+String SDLCore::saveFilePicker(std::vector<CoreFileExtension> extensions) {
+        String r = "";
+        return r;
 }
 
 void SDLCore::resizeTo(int xRes, int yRes) {

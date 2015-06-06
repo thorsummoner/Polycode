@@ -21,6 +21,7 @@
  */
  
 #include "ToolWindows.h"
+#include "PolycodeToolLauncher.h"
 
 TextInputPopup::TextInputPopup() : UIWindow(L"", 300, 80) {
 	
@@ -75,13 +76,54 @@ TextInputPopup::~TextInputPopup() {
 	
 }
 
+MessagePopup::MessagePopup() : UIWindow("", 300, 80) {
+    captionLabel = new UILabel("This is a caption", 12);
+	addChild(captionLabel);
+	captionLabel->setPosition(padding, 35);
+    
+	okButton = new UIButton(L"OK", 100);
+	okButton->addEventListener(this, UIEvent::CLICK_EVENT);
+    addChild(okButton);
+	okButton->setPosition(120, 60);
+	
+	closeOnEscape = true;
+}
+
+MessagePopup::~MessagePopup() {
+    
+}
+
+void MessagePopup::setCaption(String caption) {
+	captionLabel->setText(caption);
+	
+	Number windowSize = captionLabel->getWidth() + 50;
+	if(windowSize < 400)
+		windowSize = 400;
+	setWindowSize(windowSize, 80);
+	captionLabel->setPosition(padding + (windowSize - captionLabel->getWidth()) / 2.0, 35);
+	okButton->setPosition(padding + ((windowSize - okButton->getWidth()) / 2.0), 60);
+}
+
+void MessagePopup::handleEvent(Event *event) {
+	if(event->getEventType() == "UIEvent") {
+		if(event->getEventCode() == UIEvent::CLICK_EVENT) {
+			if(event->getDispatcher() == okButton) {
+				dispatchEvent(new UIEvent(), UIEvent::OK_EVENT);
+				dispatchEvent(new UIEvent(), UIEvent::CLOSE_EVENT);
+			}
+		}
+	}
+	UIWindow::handleEvent(event);
+}
+
+
 YesNoPopup::YesNoPopup() : UIWindow(L"", 300, 80) {
 	
-	captionLabel = new ScreenLabel("This is a caption", 12);	
+	captionLabel = new UILabel("This is a caption", 12);	
 	addChild(captionLabel);
 	captionLabel->setPosition(padding, 35);
 		
-	buttonAnchor = new ScreenEntity();
+	buttonAnchor = new Entity();
 	buttonAnchor->processInputEvents = true;
 	addChild(buttonAnchor);
 			
@@ -133,11 +175,11 @@ YesNoPopup::~YesNoPopup() {
 
 YesNoCancelPopup::YesNoCancelPopup() : UIWindow(L"", 300, 80) {
 	
-	captionLabel = new ScreenLabel("This is a caption", 12);	
+	captionLabel = new UILabel("This is a caption", 12);	
 	addChild(captionLabel);
 	captionLabel->setPosition(padding, 35);
 		
-	buttonAnchor = new ScreenEntity();
+	buttonAnchor = new Entity();
 	buttonAnchor->processInputEvents = true;
 	addChild(buttonAnchor);
 	
@@ -194,4 +236,177 @@ void YesNoCancelPopup::handleEvent(Event *event) {
 
 YesNoCancelPopup::~YesNoCancelPopup() {
 	
+}
+
+AssetImporterWindow::AssetImporterWindow() : UIWindow("3D Asset Importer", 650, 330) {
+	filesToImportLabel = new UILabel("Files that will be imported:", 12);
+	addChild(filesToImportLabel);
+	filesToImportLabel->setPosition(padding, 35);
+	
+	filesAnchor = new Entity();	
+		
+	filesScroller = new UIScrollContainer(filesAnchor, true, true, 270, 200);
+	addChild(filesScroller);
+	filesScroller->setPosition(padding, 60);
+		
+	cancelButton = new UIButton(L"Cancel", 100);
+	cancelButton->addEventListener(this, UIEvent::CLICK_EVENT);
+	addChild(cancelButton);
+	cancelButton->setPosition(padding+650-100-100-10-10, 315);
+	
+	okButton = new UIButton(L"OK", 100);
+	okButton->addEventListener(this, UIEvent::CLICK_EVENT);
+	addChild(okButton);
+	okButton->setPosition(padding+650-100-10, 315);
+	
+	closeOnEscape = true;
+
+	prefixInput = new UITextInput(false, 200, 16);
+	prefixInput->setPosition(290, 30);
+	addChild(prefixInput); 
+	prefixInput->addEventListener(this, UIEvent::CHANGE_EVENT);
+		
+	usePrefixCheckbox = new UICheckBox("Custom filename prefix", false);
+	usePrefixCheckbox->setPosition(290, 60);
+	addChild(usePrefixCheckbox);
+	usePrefixCheckbox->addEventListener(this, UIEvent::CHANGE_EVENT);
+	
+	addMeshesCheckbox = new UICheckBox("Add all meshes to a single mesh", false);
+	addMeshesCheckbox->setPosition(290, 90);
+	addChild(addMeshesCheckbox); 
+	addMeshesCheckbox->addEventListener(this, UIEvent::CHANGE_EVENT);
+	
+	generateNormalsCheckbox = new UICheckBox("Generate normals", false);
+	generateNormalsCheckbox->setPosition(290, 120);
+	addChild(generateNormalsCheckbox);
+    
+	generateTangensCheckbox = new UICheckBox("Generate tangents", true);
+	generateTangensCheckbox->setPosition(290, 150);
+	addChild(generateTangensCheckbox);
+
+	swapZYAxisCheckbox = new UICheckBox("Swap Z/Y axis (e.g. for Blender)", false);
+	swapZYAxisCheckbox->setPosition(290, 180);
+	addChild(swapZYAxisCheckbox);
+    
+    exportNormals = new UICheckBox("Vertex normals", true);
+	exportNormals->setPosition(520, 30);
+	addChild(exportNormals);
+    
+    exportTangents = new UICheckBox("Vertex tangents", true);
+	exportTangents->setPosition(520, 60);
+	addChild(exportTangents);
+    
+    exportColors = new UICheckBox("Vertex colors", false);
+	exportColors->setPosition(520, 90);
+	addChild(exportColors);
+    
+    exportBoneWeights = new UICheckBox("Bone weights", false);
+	exportBoneWeights->setPosition(520, 120);
+	addChild(exportBoneWeights);
+    
+    exportUVs = new UICheckBox("UV coordinates", true);
+	exportUVs->setPosition(520, 150);
+	addChild(exportUVs);
+    
+    exportSecondaryUVs = new UICheckBox("Secondary UVs", false);
+	exportSecondaryUVs->setPosition(520, 180);
+	addChild(exportSecondaryUVs);
+
+    exportScene = new UICheckBox("Export Entity file", false);
+	exportScene->setPosition(290, 240);
+	addChild(exportScene);
+
+    generateMatFile = new UICheckBox("Generate material file", false);
+	generateMatFile->setPosition(450, 240);
+	addChild(generateMatFile);
+
+    overrideMaterial = new UICheckBox("Override materials:", false);
+	overrideMaterial->setPosition(290, 270);
+	addChild(overrideMaterial);
+
+    overrideMaterialInput = new UITextInput(false, 200, 16);
+	overrideMaterialInput->setPosition(450, 265);
+	addChild(overrideMaterialInput);
+    overrideMaterialInput->setText("Default");
+    
+}
+
+void AssetImporterWindow::handleEvent(Event *event) {
+    if(!enabled) {
+        return;
+    }
+	if(event->getDispatcher() == okButton) {
+	
+		String prefixString;
+		if(usePrefixCheckbox->isChecked() && prefixInput->getText() != "") {
+			prefixString = prefixInput->getText().replace(" ", "_");
+		}
+		PolycodeToolLauncher::importAssets(file, folder, addMeshesCheckbox->isChecked(), prefixString, swapZYAxisCheckbox->isChecked(), generateNormalsCheckbox->isChecked(), generateTangensCheckbox->isChecked(), false, exportNormals->isChecked(), exportTangents->isChecked(), exportColors->isChecked(), exportBoneWeights->isChecked(), exportUVs->isChecked(), exportSecondaryUVs->isChecked(), exportScene->isChecked(), generateMatFile->isChecked(), overrideMaterial->isChecked(), overrideMaterialInput->getText(), true, projectRelativeFolder);
+	
+		dispatchEvent(new UIEvent(), UIEvent::OK_EVENT);
+		dispatchEvent(new UIEvent(), UIEvent::CLOSE_EVENT);	
+	} else if(event->getDispatcher() == cancelButton) {
+		dispatchEvent(new UIEvent(), UIEvent::CLOSE_EVENT);
+	}
+
+	UIWindow::handleEvent(event);
+}
+
+void AssetImporterWindow::clearFiles() {
+	for(int i=0; i < fileLabels.size(); i++) {
+		filesAnchor->removeChild(fileLabels[i]);
+		delete fileLabels[i];
+	}
+	fileLabels.clear();
+	filesScroller->setContentSize(0,0);
+}
+
+void AssetImporterWindow::addFile(String fileName) {
+	UILabel *fileLabel = new UILabel(fileName, 12);
+	filesAnchor->addChild(fileLabel);
+	fileLabel->setPosition(0.0, 14 * fileLabels.size());
+
+	if(fileLabel->getWidth() > filesScroller->getContentSize().x) {
+		filesScroller->setContentSize(fileLabel->getWidth(), (fileLabels.size()+1) * 14);
+	} else {
+		filesScroller->setContentSize(filesScroller->getContentSize().x, (fileLabels.size()+1) * 14);	
+	}	
+	filesScroller->setScrollValue(0, 0);
+	
+	fileLabels.push_back(fileLabel);
+}
+
+void AssetImporterWindow::setSourceFileAndTargetFolder(String file, String folder, String projectRelativeFolder) {
+	this->file = file;
+	this->folder = folder;
+    this->projectRelativeFolder = projectRelativeFolder;
+	refreshPreview();
+}
+
+void AssetImporterWindow::refreshPreview() {
+	String prefixString;
+	if(usePrefixCheckbox->isChecked() && prefixInput->getText() != "") {
+		prefixString = prefixInput->getText().replace(" ", "_");
+	}
+	String fileList = PolycodeToolLauncher::importAssets(file, folder, addMeshesCheckbox->isChecked(), prefixString, swapZYAxisCheckbox->isChecked(), generateNormalsCheckbox->isChecked(), generateTangensCheckbox->isChecked(), true, false, false, false, false, false, false, false, false, false, "", false, "");
+	setFilesToImport(fileList);		
+}
+
+void AssetImporterWindow::setFilesToImport(String files) {	
+	clearFiles();
+	
+	if(files == "") {
+		addFile("NO");
+		addFile("IMPORTABLE");
+		addFile("ASSETS");
+	}else {
+		std::vector<String> splitFiles = files.split("\n");
+		for(int i=0; i < splitFiles.size(); i++) {
+			addFile(splitFiles[i]);
+		}
+	}
+}
+
+AssetImporterWindow::~AssetImporterWindow() {
+
 }

@@ -24,6 +24,9 @@
 
 namespace Polycode {
 
+TouchInfo::TouchInfo() : type(TYPE_TOUCH) {
+}
+
 InputEvent::InputEvent() : Event() {
 	eventType = "InputEvent";
 }
@@ -39,6 +42,10 @@ InputEvent::InputEvent(PolyKEY key, wchar_t charCode, int timestamp) : Event() {
 	this->charCode = charCode;
 	this->timestamp = timestamp;
 	eventType = "InputEvent";	
+}
+    
+wchar_t InputEvent::getCharCode() {
+    return charCode;
 }
 
 /*

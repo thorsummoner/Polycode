@@ -95,8 +95,12 @@
 
 #define EXTENDED_KEYMASK	(1<<24)
 
+#define NO_TOUCH_API
+#define NO_PEN_API
+
 #ifdef _MINGW
 #define NO_TOUCH_API 1
+#define NO_PEN_API 1
 #endif
 
 #define POLYCODE_CORE Win32Core
@@ -116,6 +120,7 @@ namespace Polycode {
 		int mouseY;
 		TouchInfo touch;
 		std::vector<TouchInfo> touches;
+		int touchType;
 		PolyKEY keyCode;
 		wchar_t unicodeChar;		
 		char mouseButton;	
@@ -175,14 +180,14 @@ public:
 		
 	public:
 		
-		Win32Core(PolycodeViewBase *view, int xRes, int yRes, bool fullScreen, bool vSync, int aaLevel, int anisotropyLevel, int frameRate,  int monitorIndex = -1);
+		Win32Core(PolycodeViewBase *view, int xRes, int yRes, bool fullScreen, bool vSync, int aaLevel, int anisotropyLevel, int frameRate,  int monitorIndex = -1, bool retinaSupport = false);
 		~Win32Core();
 
 		void enableMouse(bool newval);
 		void captureMouse(bool newval);
 		void warpCursor(int x, int y);
 		unsigned int getTicks();		
-		bool Update();
+		bool systemUpdate();
 		void Render();
 		void setVSync(bool vSyncVal);
 
@@ -193,13 +198,16 @@ public:
 		void handleMouseDown(int mouseCode,LPARAM lParam, WPARAM wParam);
 		void handleMouseUp(int mouseCode,LPARAM lParam, WPARAM wParam);
 		void handleTouchEvent(LPARAM lParam, WPARAM wParam);
+		void handlePointerUpdate(LPARAM lParam, WPARAM wParam);
 
 		bool isMultiTouchEnabled() { return hasMultiTouch; }
 
-		void setVideoMode(int xRes, int yRes, bool fullScreen, bool vSync, int aaLevel, int anisotropyLevel);
+		void setVideoMode(int xRes, int yRes, bool fullScreen, bool vSync, int aaLevel, int anisotropyLevel, bool retinaSupport = true);
 		
-		void initContext(bool usePixelFormat, unsigned int pixelFormat);
+		void initContext(int aaLevel);
 		void destroyContext();
+
+		void getWglFunctionPointers();
 
 		void createThread(Threaded *target);
 
@@ -231,12 +239,17 @@ public:
 		
 		String executeExternalCommand(String command,  String args, String inDirectory);
 		std::vector<String> openFilePicker(std::vector<CoreFileExtension> extensions, bool allowMultiple);
+		String saveFilePicker(std::vector<CoreFileExtension> extensions);
+
 		void createFolder(const String& folderPath);
 		void openURL(String url);
 		String openFolderPicker();
 		void copyDiskItem(const String& itemPath, const String& destItemPath);
 		void moveDiskItem(const String& itemPath, const String& destItemPath);
 		void removeDiskItem(const String& itemPath);
+
+		Number getBackingXRes();
+		Number getBackingYRes();
 
 		void setCursor(int cursorType);
 
@@ -248,11 +261,13 @@ public:
 		std::vector<GamepadDeviceEntry*> gamepads;
 
 		HWND hWnd;
+		HINSTANCE hInstance;
 		bool hasCopyDataString;
 		String copyDataString;
 
 	private:
 
+		Number scaleFactor;
 		bool checkSpecialKeyEvents(PolyKEY key);
 
 		unsigned int nextDeviceID;
@@ -261,24 +276,23 @@ public:
 
 		std::vector<Win32Event> win32Events;
 
-		void initMultisample(int numSamples);
-
-
 		int lastMouseX;
 		int lastMouseY;
 
 		bool isFullScreen;
+		bool retinaSupport;
+		bool resizable;
 
 		HDC hDC;
 		HGLRC hRC;
-		unsigned int PixelFormat;
-		PIXELFORMATDESCRIPTOR pfd;
 		
 		// frequency of the windows performance counter
 		double pcFreq;
 
 		// Tracks whether the system supports multitouch at runtime
 		bool hasMultiTouch;
+
+		std::vector<TouchInfo> pointerTouches;
 		
 #ifndef NO_TOUCH_API
 		// Create generic reference to any multitouch functions we need, so that we

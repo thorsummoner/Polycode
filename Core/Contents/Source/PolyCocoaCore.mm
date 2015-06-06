@@ -82,8 +82,10 @@ void Core::getScreenInfo(int *width, int *height, int *hz) {
     CGDisplayModeRelease(mode);
 }
 
-CocoaCore::CocoaCore(PolycodeView *view, int _xRes, int _yRes, bool fullScreen, bool vSync, int aaLevel, int anisotropyLevel, int frameRate, int monitorIndex) : Core(_xRes, _yRes, fullScreen, vSync, aaLevel, anisotropyLevel, frameRate, monitorIndex) {	
+CocoaCore::CocoaCore(PolycodeView *view, int _xRes, int _yRes, bool fullScreen, bool vSync, int aaLevel, int anisotropyLevel, int frameRate, int monitorIndex, bool retinaSupport) : Core(_xRes, _yRes, fullScreen, vSync, aaLevel, anisotropyLevel, frameRate, monitorIndex) {
 
+    this->retinaSupport = retinaSupport;
+    
 	hidManager = NULL;
 	initGamepad();
 	this->fullScreen = false;
@@ -100,7 +102,7 @@ CocoaCore::CocoaCore(PolycodeView *view, int _xRes, int _yRes, bool fullScreen, 
 	[view setCore:this];
 	
 	glView = view;
-	
+    
 	context = nil;
 	
 	initTime = mach_absolute_time();					
@@ -138,7 +140,8 @@ String CocoaCore::getClipboardString() {
 	return [retString UTF8String];
 }
 
-void CocoaCore::setVideoMode(int xRes, int yRes, bool fullScreen, bool vSync, int aaLevel, int anisotropyLevel) {	
+void CocoaCore::setVideoMode(int xRes, int yRes, bool fullScreen, bool vSync, int aaLevel, int anisotropyLevel, bool retinaSupport) {
+    this->retinaSupport = retinaSupport;
 	// hack to make sure there are no window race conditions
 	modeChangeInfo.needResolutionChange = true;
 	modeChangeInfo.xRes = xRes;
@@ -149,11 +152,40 @@ void CocoaCore::setVideoMode(int xRes, int yRes, bool fullScreen, bool vSync, in
 	modeChangeInfo.anisotropyLevel = anisotropyLevel;	
 }
 
+Number CocoaCore::getBackingXRes() {
+    if(!retinaSupport) {
+        return getXRes();
+    }
+    NSRect backingBounds = [glView convertRectToBacking:[glView bounds]];
+    return backingBounds.size.width;
+}
+
+Number CocoaCore::getBackingYRes() {
+    if(!retinaSupport) {
+        return getYRes();
+    }
+    NSRect backingBounds = [glView convertRectToBacking:[glView bounds]];
+    return backingBounds.size.height;
+}
+
 void CocoaCore::_setVideoMode(int xRes, int yRes, bool fullScreen, bool vSync, int aaLevel, int anisotropyLevel) {
 	this->xRes = xRes;
 	this->yRes = yRes;
-	
-	bool _wasFullscreen = this->fullScreen;	
+
+    NSRect backingBounds;
+    if(retinaSupport) {
+        [glView setWantsBestResolutionOpenGLSurface:YES];
+        backingBounds = [glView convertRectToBacking: NSMakeRect(0, 0, xRes, yRes)];
+        renderer->setBackingResolutionScale(backingBounds.size.width/xRes, backingBounds.size.height/yRes);
+	} else {
+        [glView setWantsBestResolutionOpenGLSurface:NO];
+        backingBounds.size.width = xRes;
+        backingBounds.size.height = yRes;
+        renderer->setBackingResolutionScale(1.0, 1.0);
+        
+    }
+    
+	bool _wasFullscreen = this->fullScreen;
 	this->fullScreen = fullScreen;
 	this->aaLevel = aaLevel;
 	
@@ -232,13 +264,14 @@ void CocoaCore::_setVideoMode(int xRes, int yRes, bool fullScreen, bool vSync, i
 
 	CGLContextObj ctx = (CGLContextObj) [context CGLContextObj];
 	if(fullScreen) {
-		GLint dim[2] = {xRes, yRes};
+		GLint dim[2] = {backingBounds.size.width, backingBounds.size.height};
 		CGLSetParameter(ctx, kCGLCPSurfaceBackingSize, dim);
 		CGLEnable (ctx, kCGLCESurfaceBackingSize);
 	} else {
 		CGLDisable(ctx, kCGLCESurfaceBackingSize);		
 	}
-	renderer->Resize(xRes, yRes);	
+    
+	renderer->Resize(xRes, yRes);
 
 	if(aaLevel > 0) {
 		glEnable( GL_MULTISAMPLE_ARB );
@@ -476,7 +509,16 @@ void CocoaCore::checkEvents() {
 						break;
 					case InputEvent::EVENT_KEYUP:
 						input->setKeyState(event.keyCode, event.unicodeChar, false, getTicks());
-						break;						
+                    break;
+                    case InputEvent::EVENT_TOUCHES_BEGAN:
+                        input->touchesBegan(event.touch, event.touches, getTicks());
+                        break;
+                    case InputEvent::EVENT_TOUCHES_ENDED:
+                        input->touchesEnded(event.touch, event.touches, getTicks());
+                        break;
+                    case InputEvent::EVENT_TOUCHES_MOVED:
+                        input->touchesMoved(event.touch, event.touches, getTicks());
+                    break;
 				}
 				break;
 				case CocoaEvent::FOCUS_EVENT:
@@ -538,6 +580,36 @@ String CocoaCore::openFolderPicker() {
 	}	
 }
 
+String CocoaCore::saveFilePicker(std::vector<CoreFileExtension> extensions) {
+	unlockMutex(eventMutex);	    
+    String retString;
+  	NSSavePanel *attachmentPanel = [NSSavePanel savePanel];
+    
+	[attachmentPanel setCanCreateDirectories: YES];
+
+	NSMutableArray *types = nil;
+    
+	if(extensions.size() > 0) {
+		types = [[NSMutableArray alloc] init];
+		for(int i=0; i < extensions.size(); i++) {
+			CoreFileExtension extInfo = extensions[i];
+			[types addObject: [NSString stringWithUTF8String: extInfo.extension.c_str()]];
+		}
+	}
+	[attachmentPanel setAllowedFileTypes:types];
+    
+	if ( [attachmentPanel runModal] == NSOKButton )
+	{
+		NSURL* url = [attachmentPanel URL];
+        if(url) {
+            NSString* fileName = [url path];
+            retString = [fileName UTF8String];
+		}
+	}
+    
+    return retString;
+}
+
 vector<String> CocoaCore::openFilePicker(vector<CoreFileExtension> extensions, bool allowMultiple) {
 	unlockMutex(eventMutex);	
 	vector<String> retVector;
@@ -576,8 +648,7 @@ vector<String> CocoaCore::openFilePicker(vector<CoreFileExtension> extensions, b
 }
 
 void CocoaCore::Render() {
-	lockMutex(CoreServices::getRenderMutex());	
-	checkEvents();
+	lockMutex(CoreServices::getRenderMutex());
 	
 	if(!paused) {	
 		renderer->BeginRender();
@@ -593,7 +664,7 @@ void CocoaCore::Render() {
 	unlockMutex(CoreServices::getRenderMutex());
 }
 
-bool CocoaCore::Update() {
+bool CocoaCore::systemUpdate() {
 	if(!running)
 		return false;
 	doSleep();
@@ -603,11 +674,10 @@ bool CocoaCore::Update() {
 		modeChangeInfo.needResolutionChange = false;
 	}
 							
-	updateCore();		
+	updateCore();
+	checkEvents();
 	return running;
 }
-
-
 
 static void hatValueToXY(CFIndex value, CFIndex range, int * outX, int * outY) {
 	if (value == range) {
@@ -748,6 +818,9 @@ CFArrayRef elements;
 	GamepadDeviceEntry *entry = new GamepadDeviceEntry();
 	entry->device = device;
 	entry->input  = core->getInput();
+    entry->numButtons = 0;
+    entry->numAxes = 0;
+    
 	entry->deviceID = core->nextDeviceID++;
 	core->gamepads.push_back(entry);	
 	core->getInput()->addJoystick(entry->deviceID);
@@ -803,6 +876,13 @@ static void onDeviceRemoved(void * context, IOReturn result, void * sender, IOHI
 void CocoaCore::shutdownGamepad() {
 	if (hidManager != NULL) {
 		
+        
+        for (int i = 0; i < gamepads.size(); i++) {
+            IOHIDDeviceRegisterInputValueCallback(gamepads[i]->device, NULL, NULL);
+            delete gamepads[i];
+        }
+        
+        
 		IOHIDManagerRegisterDeviceMatchingCallback(hidManager, NULL, NULL);
 		IOHIDManagerRegisterDeviceRemovalCallback(hidManager, NULL, NULL);		
 		
@@ -810,11 +890,7 @@ void CocoaCore::shutdownGamepad() {
 		IOHIDManagerClose(hidManager, 0);
 		CFRelease(hidManager);
 		hidManager = NULL;
-		
-		for (int i = 0; i < gamepads.size(); i++) {
-			IOHIDDeviceRegisterInputValueCallback(gamepads[i]->device, NULL, NULL);		
-			delete gamepads[i];
-		}
+
 		
 	}
 }

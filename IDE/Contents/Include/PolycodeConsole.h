@@ -61,8 +61,8 @@ class BackTraceEntry : public UIElement {
 		String fileName;
 		unsigned int lineNumber;
 		
-		ScreenShape *labelBg;	
-		ScreenLabel *label;
+		UIRect *labelBg;	
+		UILabel *label;
 };
 
 class BackTraceWindow : public UIElement {
@@ -81,7 +81,7 @@ class BackTraceWindow : public UIElement {
 		void adjustEntries();
 		
 	protected:			
-		ScreenShape *labelBg;
+		UIRect *labelBg;
 		std::vector<BackTraceEntry*> entries;
 		
 };
@@ -92,14 +92,26 @@ class ConsoleWindow : public UIElement {
 		ConsoleWindow();
 		
 		void Resize(Number width, Number height);
+    
+        void clearBuffer();
+        void printToBuffer(String msg);
 		
-		UITextInput *debugTextInput;
+        void Update();
+    
 		UITextInput *consoleTextInput;
 		
 		UIImageButton *clearButton;
 		UIImageButton *hideConsoleButton;
 		
-		ScreenShape *labelBg;
+		UIRect *labelBg;
+    
+        bool consoleDirty;
+        Number consoleTimer;
+        Number consoleRefreshInterval;
+    
+        int consoleBufferMaxSize;
+        std::vector<String> consoleBuffer;
+		UITextInput *debugTextInput;
 };
 
 class PolycodeConsole : public UIElement {

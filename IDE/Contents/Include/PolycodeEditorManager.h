@@ -24,6 +24,7 @@
 
 #include "Polycode.h"
 #include "PolycodeEditor.h"
+#include "PolycodeProjectManager.h"
 
 using namespace Polycode;
 
@@ -45,11 +46,17 @@ class PolycodeEditorManager : public EventDispatcher {
 		void setCurrentEditor(PolycodeEditor *editor, bool sendChangeEvent = true);
 		PolycodeEditor *getCurrentEditor() { return currentEditor; }
 		
+		std::vector<PolycodeEditor*> getOpenEditorsForProject(PolycodeProject *project);
+		
+		PolycodeEditor *openFile(OSFileEntry file);
+		
 		void saveAll();
 		
 		bool hasUnsavedFiles();
 		bool hasUnsavedFilesForProject(PolycodeProject *project);
 		void saveFilesForProject(PolycodeProject *project);
+		
+		void setProjectManager(PolycodeProjectManager *projectManager);
 		
 	//	int close
 	std::vector<PolycodeEditor*> openEditors;
@@ -57,6 +64,6 @@ class PolycodeEditorManager : public EventDispatcher {
 protected:
 	
 	PolycodeEditor *currentEditor;
-	
+	PolycodeProjectManager *projectManager;
 	std::vector<PolycodeEditorFactory*> editorFactories;	
 };

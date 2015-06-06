@@ -23,6 +23,7 @@
 #pragma once
 
 #include "PolycodeEditor.h"
+#include "PolyUIElement.h"
 #include <Polycode.h>
 
 using namespace Polycode;
@@ -36,20 +37,14 @@ class PolycodeImageEditor : public PolycodeEditor {
 	void Resize(int x, int y);
 	
 	protected:
-		ScreenImage *grid;
 	
-		ScreenShape *editorImage;
-		
-		ScreenShape *leftShape;		
-		ScreenShape *rightShape;		
-		ScreenShape *topShape;		
-		ScreenShape *bottomShape;								
+		UIRect *editorImage;
 		
 		Number aspectRatio;
 };
 
 class PolycodeImageEditorFactory : public PolycodeEditorFactory {
 	public:
-		PolycodeImageEditorFactory() : PolycodeEditorFactory() { extensions.push_back("png"); }
+        PolycodeImageEditorFactory() : PolycodeEditorFactory() { extensions.push_back("png"); extensions.push_back("hdr");  extensions.push_back("jpg");  extensions.push_back("tga");  extensions.push_back("psd");}
 		PolycodeEditor *createEditor() { return new PolycodeImageEditor(); }
 };

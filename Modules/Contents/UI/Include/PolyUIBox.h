@@ -22,7 +22,7 @@
 
 #pragma once
 #include "PolyGlobals.h"
-#include "PolyScreenImage.h"
+#include "PolySceneImage.h"
 #include "PolyUIElement.h"
 
 namespace Polycode {
@@ -30,7 +30,7 @@ namespace Polycode {
 	class _PolyExport UIBox : public UIElement {
 	public:
 		UIBox(String imageFile, Number t, Number r, Number b, Number l, Number boxWidth, Number boxHeight);
-		~UIBox();
+		virtual ~UIBox();
 		
 		void resizeBox(Number newWidth, Number newHeight);		
 		
@@ -41,16 +41,16 @@ namespace Polycode {
 		Number b;
 		Number l;
 		
-		ScreenImage *tlImage;
-		ScreenImage *trImage;		
-		ScreenImage *blImage;		
-		ScreenImage *brImage;			
+		UIRect *tlImage;
+		UIRect *trImage;		
+		UIRect *blImage;		
+		UIRect *brImage;			
 		
-		ScreenImage *centerImage;
+		UIRect *centerImage;
 		
-		ScreenImage *tImage;
-		ScreenImage *rImage;
-		ScreenImage *bImage;
-		ScreenImage *lImage;		
+		UIRect *tImage;
+		UIRect *rImage;
+		UIRect *bImage;
+		UIRect *lImage;		
 	};
 }

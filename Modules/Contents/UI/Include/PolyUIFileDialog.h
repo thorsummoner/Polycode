@@ -35,7 +35,7 @@ namespace Polycode {
 	class CreateFolderWindow : public UIWindow {
 		public:
 			CreateFolderWindow();
-			~CreateFolderWindow();
+			virtual ~CreateFolderWindow();
 
 			UIButton *okButton;
 			UIButton *cancelButton;
@@ -51,10 +51,10 @@ namespace Polycode {
 			void Deselect();
 
 			bool canSelect;
-			ScreenShape *bg;
-			ScreenLabel *label;
+			UIRect *bg;
+			UILabel *label;
 			OSFileEntry fileEntry;
-			ScreenImage *icon;
+			UIImage *icon;
 	};
 
 	/**

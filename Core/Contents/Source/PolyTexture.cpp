@@ -22,6 +22,7 @@
 
 #include "string.h"
 #include "PolyTexture.h"
+#include <stdlib.h>
 
 using namespace Polycode;
 
@@ -39,7 +40,7 @@ Texture::Texture(unsigned int width, unsigned int height, char *textureData,bool
 			pixelSize = 4;						
 		break;
 		case Image::IMAGE_FP16:		
-			pixelSize = 16;
+			pixelSize = 12;
 		break;
 		default:
 			pixelSize = 4;								
@@ -87,7 +88,7 @@ void Texture::setImageData(Image *data) {
 			pixelSize = 4;						
 		break;
 		case Image::IMAGE_FP16:		
-			pixelSize = 16;
+			pixelSize = 12;
 		break;
 		default:
 			pixelSize = 4;								

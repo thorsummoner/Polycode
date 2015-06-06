@@ -26,12 +26,9 @@
 
 using namespace Polycode;
 
-Font::Font(const String& fileName) {
+Font::Font(const String& fileName, FT_Library FTLibrary) {
 
 	this->fileName = fileName;
-
-	FT_Library FTLibrary;
-	FT_Init_FreeType(&FTLibrary);
 	
 	loaded = false;
 	buffer = NULL;

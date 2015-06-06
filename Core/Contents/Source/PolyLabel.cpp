@@ -76,6 +76,14 @@ unsigned int Label::getSize() const {
 	return size;
 }
 
+bool Label::getPremultiplyAlpha() const {
+    return premultiplyAlpha;
+}
+
+void Label::setPremultiplyAlpha(bool val) {
+    premultiplyAlpha = val;
+}
+
 void Label::setSize(int newSize) {
 	size = newSize;
 	_optionsChanged	= true;
@@ -419,10 +427,19 @@ void Label::setText(const String& text) {
 	
 	unsigned int textWidth = (bbox.xMax -  bbox.xMin)+1;
 	unsigned int textHeight = (bbox.yMax -  bbox.yMin)+1;
-	
+
 	baseLineOffset = bbox.yMin;
 	xAdjustOffset = bbox.xMin;
 	baseLineAdjust = bbox.yMax;
+    
+	if(textWidth % 2 ){
+		textWidth++;
+	}
+	if(textHeight % 2 ){
+		textHeight++;
+        baseLineAdjust++;
+	}
+
 	
 	createEmpty(textWidth,textHeight);	
 	renderGlyphs(&labelData);

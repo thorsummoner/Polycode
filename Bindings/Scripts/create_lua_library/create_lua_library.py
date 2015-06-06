@@ -16,7 +16,7 @@ def mkdir_p(path): # Same effect as mkdir -p, create dir and all necessary paren
 		else: raise
 
 def template_returnPtrLookupArray(prefix, className, ptr):
-	out = ""
+	out = "%sif %s == nil then return nil end\n" % (prefix, ptr)
 	out += "%sfor i=1,count(%s) do\n" % (prefix, ptr)
 	out += "%s\tlocal __c  = _G[%s](\"__skip_ptr__\")\n" % (prefix, className.replace("*", ""))
 	out += "%s\t__c.__ptr = %s[i]\n" % (prefix, ptr)
@@ -27,7 +27,7 @@ def template_returnPtrLookupArray(prefix, className, ptr):
 
 # Note we expect className to be a valid string
 def template_returnPtrLookup(prefix, className, ptr):
-	out = ""
+	out = "%sif %s == nil then return nil end\n" % (prefix, ptr)
 	out += "%slocal __c = _G[%s](\"__skip_ptr__\")\n" % (prefix, className.replace("*", ""))
 	out += "%s__c.__ptr = %s\n" % (prefix, ptr)
 	out += "%sreturn __c\n" % (prefix)
@@ -52,7 +52,9 @@ def typeFilter(ty):
 	ty = ty.replace("virtual", "")
 	ty = ty.replace("&", "")
 	ty = re.sub(r'^.*\sint\s*$', 'int', ty) # eg "unsigned int"
+	ty = re.sub(r'^.*\schar\s*$', 'char', ty) # eg "unsigned int"
 	ty = re.sub(r'^.*\slong\s*$', 'int', ty)
+	ty = re.sub(r'^.*\swchar_t\s*$', 'int', ty)
 	ty = re.sub(r'^.*\sshort\s*$', 'int', ty)
 	ty = re.sub(r'^.*\sfloat\s*$', 'Number', ty)
 	ty = re.sub(r'^.*\sdouble\s*$', 'Number', ty) # eg "long double"
@@ -78,9 +80,9 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 	cppRegisterOut += "using namespace Polycode;\n\n"
 	cppRegisterOut += "int luaopen_%s(lua_State *L) {\n" % (prefix)
 
-#	if prefix != "Polycode":
-#		cppRegisterOut += "CoreServices *inst = (CoreServices*) *((void**)lua_touserdata(L, 1));\n"
-#		cppRegisterOut += "CoreServices::setInstance(inst);\n"
+	if prefix != "Polycode" and prefix != "Physics2D" and prefix != "Physics3D" and prefix != "UI":
+		cppRegisterOut += "CoreServices *inst = (CoreServices*) *((PolyBase**)lua_touserdata(L, 1));\n"
+		cppRegisterOut += "CoreServices::setInstance(inst);\n"
 	cppRegisterOut += "\tstatic const struct luaL_reg %sLib [] = {" % (libSmallName)
 	
 	wrappersHeaderOut += "#pragma once\n\n"
@@ -90,6 +92,8 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 	wrappersHeaderOut += "#include \"lua.h\"\n"
 	wrappersHeaderOut += "#include \"lualib.h\"\n"
 	wrappersHeaderOut += "#include \"lauxlib.h\"\n"
+	wrappersHeaderOut += "#undef near\n"
+	wrappersHeaderOut += "#undef far\n"
 	wrappersHeaderOut += "} // extern \"C\" \n\n"
 
 	luaDocOut += "<?xml version=\"1.0\" ?>\n"
@@ -110,8 +114,10 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 	for fileName in files:
 		if inputPathIsDir:
 			fileName = "%s/%s" % (inputPath, fileName)
+		if os.path.isdir(fileName):
+			continue
 		head, tail = os.path.split(fileName)
-		ignore = ["PolyTween", "PolyTweenManager", "PolyGLSLProgram", "PolyGLSLShader", "PolyGLSLShaderModule", "PolyWinCore", "PolyCocoaCore", "PolyAGLCore", "PolySDLCore", "Poly_iPhone", "PolyGLES1Renderer", "PolyGLRenderer", "tinyxml", "tinystr", "OpenGLCubemap", "PolyiPhoneCore", "PolyGLES1Texture", "PolyGLTexture", "PolyGLVertexBuffer", "PolyThreaded", "PolyGLHeaders", "GLee", "PolyPeer", "PolySocket", "PolyClient", "PolyServer", "PolyServerWorld", "OSFILE", "OSFileEntry", "OSBasics", "PolyLogger"]
+		ignore = ["PolyTween", "PolyTweenManager", "PolyGLSLProgram", "PolyGLSLShader", "PolyGLSLShaderModule", "PolyWinCore", "PolyCocoaCore", "PolyAGLCore", "PolySDLCore", "Poly_iPhone", "PolyGLES1Renderer", "PolyGLRenderer", "tinyxml", "tinystr", "OpenGLCubemap", "PolyiPhoneCore", "PolyGLES1Texture", "PolyGLTexture", "PolyGLVertexBuffer", "PolyThreaded", "PolyGLHeaders", "GLee", "PolyPeer", "PolySocket", "PolyClient", "PolyServer", "PolyServerWorld", "OSFILE", "OSFileEntry", "OSBasics", "PolyLogger", "PolyFontGlyphSheet"]
 		if tail.split(".")[1] == "h" and tail.split(".")[0] not in ignore:
 			filteredFiles.append(fileName)
 			wrappersHeaderOut += "#include \"%s\"\n" % (tail)
@@ -122,7 +128,7 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 
 	# list of classes that don't get the garbage collection in their meta table
 
-	disable_gc = ["Entity", "ScreenEntity", "ScreenShape", "ScreenMesh", "ScreenLine", "ScreenLabel", "SceneLabel", "SceneMesh", "Screen", "Scene", "Texture", "Image", "Camera", "ScreenParticleEmitter", "SceneParticleEmitter", "Mesh", "Vertex", "Polygon", "Polycode::Polygon", "Material", "ScenePrimitive", "SceneLine", "SceneLight", "SceneSound", "ScreenImage", "SceneEntity", "ScreenEntityInstance"]
+	disable_gc = ["Entity","SceneLabel", "SceneMesh", "Scene", "Texture", "Image", "Camera", "SceneParticleEmitter", "Mesh", "Vertex", "Polygon", "Polycode::Polygon", "Material", "ScenePrimitive", "SceneLine", "SceneLight", "SceneSound", "SceneImage", "SceneEntity", "SceneEntityInstance", "SceneSprite"]
 
 	# Special case: If we are building the Polycode library itself, inject the LuaEventHandler class.
 	# Note: so that event callbacks can work, any object inheriting from EventHandler will secretly
@@ -148,7 +154,7 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 	# Iterate, process each input file
 	for fileName in filteredFiles:
 		# "Package owned" classes that ship with Polycode
-		inheritInModule = ["PhysicsSceneEntity", "CollisionScene", "CollisionSceneEntity", "UIElement", "UIWindow", "UIMenuItem"]
+		inheritInModule = ["PhysicsEntity", "CollisionScene", "CollisionEntity", "UIElement", "UIWindow", "UIMenuItem", "UIImage", "UIRect"]
 		
 		# A file or comma-separated list of files can be given to specify classes which are "package owned"
 		# and should not be inherited out of Polycode/. The files should contain one class name per line,
@@ -164,7 +170,7 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 			f = open(fileName) # Def: Input file handle
 			contents = f.read().replace("_PolyExport", "") # Def: Input file contents, strip out "_PolyExport"
 			cppHeader = CppHeaderParser.CppHeader(contents, "string") # Def: Input file contents, parsed structure
-			ignore_classes = ["PolycodeShaderModule", "Object", "Threaded", "OpenGLCubemap", "PolyBase"]
+			ignore_classes = ["PolycodeShaderModule", "Object", "Threaded", "OpenGLCubemap", "PolyBase", "Matrix4::union "]
 
 			# Iterate, check each class in this file.
 			for ckey in cppHeader.classes: 
@@ -182,9 +188,6 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 						else: # Parent class is in Polycore
 							luaClassBindingOut += "require \"Polycode/%s\"\n\n" % (c["inherits"][0]["class"])
 
-						if (ckey == "ScreenParticleEmitter" or ckey == "SceneParticleEmitter"):
-							luaClassBindingOut += "require \"Polycode/ParticleEmitter\"\n\n"
-
 						luaClassBindingOut += "class \"%s\" (%s)\n\n" % (ckey, c["inherits"][0]["class"])
 						parentClass = c["inherits"][0]["class"]
 						inherits = True
@@ -192,11 +195,12 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 					luaClassBindingOut += "class \"%s\"\n\n" % ckey
 
 				if ckey in ignore_classes:
+					print("INGORING class %s" % ckey)
 					continue
 
-				if len(c["methods"]["public"]) < 2: # Used to, this was a continue.
-					print("Warning: Lua-binding class with less than two methods")
-					continue # FIXME: Remove this, move any non-compileable classes into ignore_classes
+				#if len(c["methods"]["public"]) < 2: # Used to, this was a continue.
+				#	print("Warning: Lua-binding class with less than two methods")
+				#	continue # FIXME: Remove this, move any non-compileable classes into ignore_classes
 
 				extendString = ""
 				if len(c["inherits"]) > 0:
@@ -316,8 +320,12 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 								wrappersHeaderOut += "\t%s(L, inst->%s%s);\n" % (outfunc, pp["name"], retFunc)
 							else:
 								if pp["type"].find("*") != -1:
-									wrappersHeaderOut += "\tPolyBase **userdataPtr = (PolyBase**)lua_newuserdata(L, sizeof(PolyBase*));\n"
-									wrappersHeaderOut += "\t*userdataPtr = (PolyBase*)inst->%s%s;\n" % (pp["name"], retFunc)
+									wrappersHeaderOut += "\tif(!inst->%s%s) {\n" % (pp["name"], retFunc)
+									wrappersHeaderOut += "\t\tlua_pushnil(L);\n"
+									wrappersHeaderOut += "\t} else {\n"
+									wrappersHeaderOut += "\t\tPolyBase **userdataPtr = (PolyBase**)lua_newuserdata(L, sizeof(PolyBase*));\n"
+									wrappersHeaderOut += "\t\t*userdataPtr = (PolyBase*)inst->%s%s;\n" % (pp["name"], retFunc)
+									wrappersHeaderOut += "\t}\n"
 								else:
 									wrappersHeaderOut += "\tPolyBase **userdataPtr = (PolyBase**)lua_newuserdata(L, sizeof(PolyBase*));\n"
 									wrappersHeaderOut += "\t*userdataPtr = (PolyBase*)&inst->%s%s;\n" % (pp["name"], retFunc)
@@ -647,7 +655,7 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 									outfunc = "lua_pushstring"
 									basicType = True
 									retFunc = ".c_str()"
-								if pm["rtnType"] == "int" or pm["rtnType"] == "unsigned int" or pm["rtnType"] == "static int" or  pm["rtnType"] == "size_t" or pm["rtnType"] == "static size_t" or pm["rtnType"] == "long" or pm["rtnType"] == "unsigned int" or pm["rtnType"] == "static long" or pm["rtnType"] == "short" or pm["rtnType"] == "PolyKEY":
+								if pm["rtnType"] == "int" or pm["rtnType"] == "unsigned int" or pm["rtnType"] == "static int" or  pm["rtnType"] == "size_t" or pm["rtnType"] == "static size_t" or pm["rtnType"] == "long" or pm["rtnType"] == "unsigned int" or pm["rtnType"] == "static long" or pm["rtnType"] == "short" or pm["rtnType"] == "PolyKEY" or pm["rtnType"] == "wchar_t":
 									outfunc = "lua_pushinteger"
 									basicType = True
 								if pm["rtnType"] == "bool" or pm["rtnType"] == "static bool" or pm["rtnType"] == "virtual bool":
@@ -728,7 +736,6 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 							if basicType == True: # Yes, a primitive
 								luaClassBindingOut += "\treturn retVal\n"
 							else: # Yes, a pointer was returned
-								luaClassBindingOut += "\tif retVal == nil then return nil end\n"
 								if vectorReturn == True:
 									className = vectorReturnClass.replace("*", "")
 									luaClassBindingOut += template_returnPtrLookupArray("\t",template_quote(className),"retVal")

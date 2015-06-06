@@ -59,6 +59,9 @@ namespace Polycode {
 		int mouseX;
 		int mouseY;
 		
+        std::vector<TouchInfo> touches;
+        TouchInfo touch;
+        
 		PolyKEY keyCode;
 		wchar_t unicodeChar;
 		
@@ -89,6 +92,7 @@ namespace Polycode {
 		public:
 			GamepadDeviceEntry() {
 				numAxes = 0;
+                numButtons = 0;
 			}
 			vector<HIDGamepadAxis> axisElements;
 			vector<HIDGamepadButton> buttonElements;			
@@ -113,16 +117,16 @@ namespace Polycode {
 	class _PolyExport CocoaCore : public Core {		
 	public:
 		
-		CocoaCore(PolycodeView *view, int xRes, int yRes, bool fullScreen, bool vSync, int aaLevel, int anisotropyLevel, int frameRate, int monitorIndex=-1);
+		CocoaCore(PolycodeView *view, int xRes, int yRes, bool fullScreen, bool vSync, int aaLevel, int anisotropyLevel, int frameRate, int monitorIndex=-1, bool retinaSupport=false);
 		virtual ~CocoaCore();
 		
 		void enableMouse(bool newval);
 		unsigned int getTicks();		
-		bool Update();
+		bool systemUpdate();
 		
 		void Render();
 								
-		void setVideoMode(int xRes, int yRes, bool fullScreen, bool vSync, int aaLevel, int anisotropyLevel);		
+		void setVideoMode(int xRes, int yRes, bool fullScreen, bool vSync, int aaLevel, int anisotropyLevel, bool retinaSupport = true);
 		void resizeTo(int xRes, int yRes);
 		void createThread(Threaded *target);		
 		
@@ -132,6 +136,7 @@ namespace Polycode {
 		void removeDiskItem(const String& itemPath);
 		String openFolderPicker();
 		vector<String> openFilePicker(vector<CoreFileExtension> extensions, bool allowMultiple);
+        String saveFilePicker(std::vector<CoreFileExtension> extensions);
 		
 		String executeExternalCommand(String command, String args, String inDirectory="");
 		
@@ -168,7 +173,10 @@ namespace Polycode {
 		unsigned int nextDeviceID;
 		
 		bool checkSpecialKeyEvents(PolyKEY key);		
-				
+
+        Number getBackingXRes();
+        Number getBackingYRes();
+        
 								
 	protected:	
 		
@@ -176,6 +184,7 @@ namespace Polycode {
 	
 		PolycodeView *glView;
 		uint64_t initTime;
+        bool retinaSupport;
 		
 		VideoModeChangeInfo modeChangeInfo;
 		

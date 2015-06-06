@@ -56,7 +56,7 @@ class FindBar : public UIElement {
 		UIComboBox *functionList;
 		
 	protected:
-		ScreenShape *barBg;
+		UIRect *barBg;
 		
 };
 
@@ -76,7 +76,7 @@ class PolycodeSyntaxHighlighter : public UITextInputSyntaxHighlighter {
 		static const int MODE_GLSL = 1;
 						
 	protected:
-	
+
 		int mode;
 	
 		std::vector<char> separators;
@@ -92,6 +92,9 @@ public:
 	void Resize(int x, int y);
 	void saveFile();
 	
+	ObjectEntry *getEditorConfig();
+	void applyEditorConfig(ObjectEntry *configEntry);
+		
 	void handleEvent(Event *event);
 	
 	void hideFindBar();

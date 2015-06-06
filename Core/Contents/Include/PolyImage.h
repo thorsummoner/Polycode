@@ -25,10 +25,23 @@ THE SOFTWARE.
 #include "PolyColor.h"
 #include "PolyRectangle.h"
 
+
 namespace Polycode {
 
 	class String;
+    
+    #define HALF_FLOAT_MIN_BIASED_EXP_AS_SINGLE_FP_EXP 0x38000000
+    #define HALF_FLOAT_MAX_BIASED_EXP_AS_SINGLE_FP_EXP 0x47800000
+    #define FLOAT_MAX_BIASED_EXP (0xFF << 23)
+    #define HALF_FLOAT_MAX_BIASED_EXP (0x1F << 10)
+    
+    typedef uint16_t hfloat;
 
+    typedef struct POLYIGNORE  {
+        int size;
+        char **tokens;
+    } TokenArray;
+    
 	/**
 	* An image in memory. Basic RGB or RGBA images stored in memory. Can be loaded from PNG files, created into textures and written to file.
 	*/
@@ -39,7 +52,7 @@ namespace Polycode {
 			* Create image from file name.
 			* @param fileName Path to image file to load.
 			*/ 
-			Image(const String& fileName);
+			explicit Image(const String& fileName);
 			
 			/**
 			* Create a blank image of specified size and type.
@@ -80,8 +93,10 @@ namespace Polycode {
 			* @return True if successfully loaded, false otherwise.
 			*/ 			
 			bool loadImage(const String& fileName);
-			bool loadPNG(const String& fileName);
-			
+        
+            static POLYIGNORE TokenArray readTokens(char *line, const char *tokens);
+            static POLYIGNORE void freeTokens(TokenArray tokens);
+        
 			/**
 			* Saves the image to a file. Currently only PNG files are supported.
 			* @param fileName Path to image file to load.	
@@ -198,18 +213,6 @@ namespace Polycode {
 			void fastBlurVert(int blurSize);
 			void fastBlurHor(int blurSize);
 			
-			/**
-			* Blurs the image using gaussian blur
-			* @param radius Radius of the blur
-			* @param deviation Standard deviation of the gaussian distribution
-			*/															
-			void gaussianBlur(float radius, float deviation);
-			float* createKernel(float radius, float deviation);
-			
-			// What are these??? I wrote them way too long ago.
-			void darken(Number amt, bool color, bool alpha);
-			void lighten(Number amt, bool color, bool alpha);
-			void multiply(Number amt, bool color, bool alpha);
 						
 			/**
 			* Returns an area of the image buffer. The area can go outside of image bounds, in which case the pixels not within the image are zeroed out. This method allocates new memory for the returned buffer and you must free it manually.
@@ -244,8 +247,6 @@ namespace Polycode {
 		
 			int getType() const { return imageType; }
 			
-			void writeBMP(const String& fileName) const;
-			
 			/**
 			* Returns the width of the image.
 			*/			
@@ -262,6 +263,9 @@ namespace Polycode {
 			*/						
 			char *getPixels();
 			
+            /**
+             * Multiplies the RGB values by alpha for each pixel.
+             */
 			void premultiplyAlpha();
 		
 			static const int IMAGE_RGB = 0;
@@ -270,6 +274,13 @@ namespace Polycode {
 		
 		protected:
 		
+            bool loadHDR(const String &fileName);
+            bool loadPNG(const String& fileName);
+            bool loadSTB(const String &fileName);
+        
+        
+            static inline hfloat convertFloatToHFloat(float f);
+        
 			void setPixelType(int type);
 
 			// transform coordinates from external topleft position mode

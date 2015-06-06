@@ -48,7 +48,7 @@ void spotLight(in int i, in vec3 normal, in vec4 pos, inout vec4 diffuse) {
 	vec3 v = -pos.xyz;
 	v = normalize(v);
 
-	float cos_outer_cone_angle = gl_LightSource[i].spotExponent;
+	float cos_outer_cone_angle = (1.0-gl_LightSource[i].spotExponent) * gl_LightSource[i].spotCosCutoff;
 	float cos_cur_angle = dot(-normalize(gl_LightSource[i].spotDirection), sn.xyz);
 	float cos_inner_cone_angle = gl_LightSource[i].spotCosCutoff;
 
@@ -96,7 +96,7 @@ void main()
 	fogFactor = clamp(fogFactor, 0.0, 1.0);
 
 	color = mix(gl_Fog.color, color, fogFactor );    
-	color.a = diffuse_color.a * texColor.a;  	
+	color.a = diffuse_color.a * texColor.a * vertexColor.a;  	
 	gl_FragColor = color;
 
 }

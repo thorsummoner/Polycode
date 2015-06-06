@@ -43,6 +43,11 @@ namespace Polycode {
 	
 	class _PolyExport CoreFileExtension : public PolyBase {
 	public:
+		CoreFileExtension() {}
+		CoreFileExtension(String description, String extension) {
+			this->extension = extension;
+			this->description = description;
+		}	
 		String extension;
 		String description;
 	};
@@ -52,6 +57,7 @@ namespace Polycode {
 		PolycodeViewBase() { windowData = NULL; }
 		virtual ~PolycodeViewBase(){}
 		void *windowData;
+		bool resizable;
 	};
 	
 	class _PolyExport TimeInfo {
@@ -87,9 +93,11 @@ namespace Polycode {
 		Core(int xRes, int yRes, bool fullScreen, bool vSync, int aaLevel, int anisotropyLevel, int frameRate, int monitorIndex);
 		virtual ~Core();
 		
-		virtual bool Update() = 0;
-
+        bool Update();
 		virtual void Render() = 0;
+        
+        bool fixedUpdate();
+        virtual bool systemUpdate() = 0;
 		
 		bool updateAndRender();
 		
@@ -206,6 +214,18 @@ namespace Polycode {
 		* @return Current vertical resolution.
 		*/													
 		Number getYRes();
+
+		/**
+         * Returns actual current horizontal resolution.
+         * @return Current actual horizontal resolution.
+         */
+        virtual Number getBackingXRes() { return getXRes(); }
+
+        /**
+         * Returns actual current vertical resolution.
+         * @return Current actual horizontal resolution.
+         */
+        virtual Number getBackingYRes() { return getYRes(); }
 				
 		/**
 		* Provides the current width, height, and refresh rate of the screen.
@@ -215,6 +235,9 @@ namespace Polycode {
 		*/
 		static void getScreenInfo(int *width, int *height, int *hz);
 
+        int getScreenWidth();
+        int getScreenHeight();
+        
 		/**
 		* Creates a folder on disk with the specified path.
 		* @param folderPath Path to create the folder in.
@@ -247,7 +270,7 @@ namespace Polycode {
 		*/
 		virtual String openFolderPicker() = 0;
 
-		void setFramerate(int frameRate);
+		void setFramerate(int frameRate, int maxFixedCycles = 8);
 		
 		/**
 		* Opens a system file picker for the specified extensions.
@@ -256,7 +279,10 @@ namespace Polycode {
 		* @return An STL vector of the selected file paths.
 		*/																							
 		virtual std::vector<String> openFilePicker(std::vector<CoreFileExtension> extensions, bool allowMultiple) = 0;
-				
+		
+		virtual String saveFilePicker(std::vector<CoreFileExtension> extensions) = 0;
+
+		
 		/**
 		* Sets a new video mode.
 		* @param xRes New horizontal resolution of the renderer.
@@ -264,7 +290,7 @@ namespace Polycode {
 		* @param fullScreen True to launch in fullscreen, false to launch in window.
 		* @param aaLevel Level of anti-aliasing. Possible values are 2,4 and 6.
 		*/																									
-		virtual void setVideoMode(int xRes, int yRes, bool fullScreen, bool vSync, int aaLevel, int anisotropyLevel) = 0;
+		virtual void setVideoMode(int xRes, int yRes, bool fullScreen, bool vSync, int aaLevel, int anisotropyLevel, bool retinaSupport=true) = 0;
 		
 		/**
 		* Resizes the renderer.
@@ -291,13 +317,24 @@ namespace Polycode {
 		* Returns the total ticks elapsed since launch.
 		* @return Time elapsed since launch in milliseconds
 		*/						
-		virtual unsigned int getTicks() = 0;		
+		virtual unsigned int getTicks() = 0;
+
+		/** Returns the target number of milliseconds between frames */
+		long getRefreshIntervalMs() const {
+			return refreshInterval;
+		}
+
+		long getTimeSleptMs() const {
+			return timeSleptMs;
+		}
+        
+        Number getFixedTimestep();
 		
 		/**
 		* Returns the total ticks elapsed since launch.
-		* @return Time elapsed since launch in floating point microseconds.
+		* @return Time elapsed since launch in floating point seconds.
 		*/		
-		Number getTicksFloat();
+		double getTicksFloat();
 		
 		void setUserPointer(void *ptr) { userPointer = ptr; }
 		void *getUserPointer() { return userPointer; }
@@ -364,13 +401,13 @@ namespace Polycode {
 		void loseFocus();
 		void gainFocus();
 		
-		
 		String userHomeDirectory;
 		String defaultWorkingDirectory;
 		
 		void *userPointer;
 		
 		long refreshInterval;
+		unsigned int timeSleptMs;
 		
 		bool fullScreen;
 		int aaLevel;
@@ -386,6 +423,11 @@ namespace Polycode {
 		unsigned int lastFrameTicks;
 		unsigned int lastFPSTicks;
 		unsigned int elapsed;
+        
+        double fixedElapsed;
+        double fixedTimestep;
+        double timeLeftOver;
+        double maxFixedElapsed;
 		
 		bool mouseEnabled;
 		bool mouseCaptured;

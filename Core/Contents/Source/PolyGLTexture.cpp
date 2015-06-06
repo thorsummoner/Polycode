@@ -44,8 +44,8 @@ OpenGLTexture::OpenGLTexture(unsigned int width, unsigned int height, char *text
 			pixelType = GL_UNSIGNED_BYTE;			
 		break;
 		case Image::IMAGE_FP16:
-			glTextureType = GL_RGBA;
-			glTextureFormat = GL_RGBA16F_ARB;				
+			glTextureType = GL_RGB;
+			glTextureFormat = GL_RGB;
 			pixelType = GL_FLOAT;
 		break;		
 		default:
@@ -59,14 +59,17 @@ OpenGLTexture::OpenGLTexture(unsigned int width, unsigned int height, char *text
 }
 
 void OpenGLTexture::recreateFromImageData() {
+    
+    if(!textureData) {
+        return;
+    }
 	
 	Number anisotropy = CoreServices::getInstance()->getRenderer()->getAnisotropyAmount();
 	
-	if(glTextureLoaded) {
-		glDeleteTextures(1, &textureID);
+	if (!glTextureLoaded) {
+		glGenTextures(1, &textureID);
 	}
 	
-	glGenTextures(1, &textureID);
 	glBindTexture(GL_TEXTURE_2D, textureID);
 	
 	if(clamp) {
@@ -119,13 +122,10 @@ void OpenGLTexture::setGLInfo(GLuint textureID, GLuint frameBufferID) {
 }
 
 void OpenGLTexture::setTextureData(char *data) {
-/*
+	memcpy(textureData, data, width * height * pixelSize);
+
 	glBindTexture(GL_TEXTURE_2D, textureID);
-	glDrawBuffer(GL_AUX0);
-	glDrawPixels(width, height, glTextureType, pixelType, data);
-	glReadBuffer(GL_AUX0);
-//	glCopyTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 0, 0, 128, 128, 0);
-*/
+	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, glTextureType, pixelType, textureData);	
 }
 
 OpenGLTexture::~OpenGLTexture() {

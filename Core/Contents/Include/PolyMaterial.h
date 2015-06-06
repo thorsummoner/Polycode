@@ -35,7 +35,7 @@ namespace Polycode {
 
 	class _PolyExport Material : public Resource {
 		public:
-			Material(const String& name);
+			explicit Material(const String& name);
 			virtual ~Material();
 			
 			void addShader(Shader *shader,ShaderBinding *shaderBinding);
@@ -67,7 +67,8 @@ namespace Polycode {
 			void *shaderModule;
 			
 			int blendingMode;
-			
+        
+            bool wireframe;
 			bool screenMaterial;
 			
 		protected:

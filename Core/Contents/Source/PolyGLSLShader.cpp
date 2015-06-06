@@ -60,64 +60,6 @@ extern PFNGLGETUNIFORMLOCATIONARBPROC glGetUniformLocation;
 
 using namespace Polycode;
 
-GLSLShaderBinding::GLSLShaderBinding(GLSLShader *shader) : ShaderBinding(shader) {
-	glslShader = shader;
-}
-
-GLSLShaderBinding::~GLSLShaderBinding() {
-	
-}
-
-Cubemap *GLSLShaderBinding::getCubemap(const String& name) {
-	for(int i=0; i < cubemaps.size(); i++) {
-		if(cubemaps[i].name == name) {			
-			return cubemaps[i].cubemap;
-		}
-	}
-	return NULL;
-}
-
-Texture *GLSLShaderBinding::getTexture(const String& name) {
-	for(int i=0; i < textures.size(); i++) {
-		if(textures[i].name == name) {			
-			return textures[i].texture;
-		}
-	}
-	return NULL;
-}
-			
-void GLSLShaderBinding::addTexture(const String& name, Texture *texture) {
-	GLSLTextureBinding binding;
-	binding.name = name;
-	binding.texture = texture;
-	textures.push_back(binding);
-}
-
-void GLSLShaderBinding::addCubemap(const String& name, Cubemap *cubemap) {
-	GLSLCubemapBinding binding;
-	binding.cubemap = cubemap;
-	binding.name = name;
-	cubemaps.push_back(binding);
-}
-
-void GLSLShaderBinding::clearCubemap(const String& name) {
-	for(int i=0; i < cubemaps.size(); i++) {
-		if(cubemaps[i].name == name) {
-			cubemaps.erase(cubemaps.begin()+i);
-			return;
-		}
-	}
-}
-
-void GLSLShaderBinding::clearTexture(const String& name) {
-	for(int i=0; i < textures.size(); i++) {
-		if(textures[i].name == name) {
-			textures.erase(textures.begin()+i);
-			return;
-		}
-	}
-}
-
 int GLSLShader::getPolycodeParamType(int glType) {
 	switch(glType) {
 		case GL_FLOAT:
@@ -179,7 +121,9 @@ void GLSLShader::linkProgram() {
 	shader_id = glCreateProgram();
     glAttachShader(shader_id, ((GLSLProgram*)fp)->program);
     glAttachShader(shader_id, ((GLSLProgram*)vp)->program);	
-	glBindAttribLocation(shader_id, 6, "vTangent");	
+	glBindAttribLocation(shader_id, 6, "vTangent");
+	glBindAttribLocation(shader_id, 7, "vBoneWeights");
+	glBindAttribLocation(shader_id, 8, "vBoneIndices");
     glLinkProgram(shader_id);
 	if(vp) {
 		vp->addEventListener(this, Event::RESOURCE_RELOAD_EVENT);
@@ -201,16 +145,18 @@ void GLSLShader::linkProgram() {
 		switch(type) {
 			case GL_SAMPLER_2D:
 				expectedTextures.push_back(String(name));
-				printf("expectedTextures: %s\n", name);
+				printf("Shader %s expecting texture: %s\n", this->getName().c_str(), name);
 			break;
 			case GL_SAMPLER_CUBE:
 				expectedCubemaps.push_back(String(name));
+				printf("Shader %s expecting cubemap: %s\n", this->getName().c_str(), name);
 			break;			
 			default:
 				ProgramParam param;
 				param.name = String(name);
 				param.type = getPolycodeParamType(type);
 				expectedParams.push_back(param);
+				printf("Shader %s expecting param glType 0x%x, polycode type %d: %s\n", this->getName().c_str(), type, param.type, name);
 			break;
 		}
 		}
@@ -265,8 +211,4 @@ void GLSLShader::reload() {
 
 GLSLShader::~GLSLShader() {
 	unlinkProgram();
-}
-
-ShaderBinding *GLSLShader::createBinding() {
-	return new GLSLShaderBinding(this);
 }

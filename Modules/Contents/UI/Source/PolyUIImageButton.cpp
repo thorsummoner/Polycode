@@ -28,15 +28,34 @@
 
 using namespace Polycode;
 
-UIImageButton::UIImageButton(String imageName) : UIElement() {
-	setPositionMode(ScreenEntity::POSITION_TOPLEFT);
+UIImageButton::UIImageButton(String imageName, Number scale, Number width, Number height) : UIElement() {
+	setAnchorPoint(-1.0, -1.0, 0.0);
 	
-	buttonImage = new ScreenImage(imageName.c_str());
+	buttonImage = new UIImage(imageName);
+
+    Number buttonWidth = buttonImage->getWidth() / scale;
+    Number buttonHeight = buttonImage->getHeight() / scale;
+    
+    if(width != -1) {
+        buttonWidth = width;
+    }
+    if(height != -1) {
+        buttonHeight = height;
+    }
+    
+    buttonImage->Resize(buttonWidth, buttonHeight);
 	addChild(buttonImage);
+	buttonImage->depthTest = false;
+	buttonImage->snapToPixels = true;
+		
+	buttonImage->setAnchorPoint(-1.0, -1.0, 0.0);
 	
-	buttonRect = new ScreenShape(ScreenShape::SHAPE_RECT, buttonImage->getWidth(),buttonImage->getHeight(),0,0);
-	buttonRect->setColor(1,1,1,0);
-	buttonRect->setPositionMode(ScreenEntity::POSITION_TOPLEFT);
+	buttonRect = new UIRect(buttonImage->getWidth(),buttonImage->getHeight());
+                       
+	buttonRect->setColor(1,1,1,1);
+    buttonRect->visible = false;
+    
+	buttonRect->setAnchorPoint(-1.0, -1.0, 0.0);
 	addChild(buttonRect);
 	
 	buttonRect->addEventListener(this, InputEvent::EVENT_MOUSEOVER);
@@ -45,9 +64,9 @@ UIImageButton::UIImageButton(String imageName) : UIElement() {
 	buttonRect->addEventListener(this, InputEvent::EVENT_MOUSEDOWN);
 	buttonRect->processInputEvents = true;
 	pressedDown = false;
-	
-	width = buttonRect->getWidth();
-	height = buttonRect->getHeight();	
+    
+	setWidth(buttonRect->getWidth());
+	setHeight(buttonRect->getHeight());	
 }
 
 void UIImageButton::handleEvent(Event *event) {

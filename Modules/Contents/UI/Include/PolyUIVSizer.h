@@ -22,7 +22,7 @@
 
 #pragma once
 #include "PolyGlobals.h"
-#include "PolyScreenShape.h"
+#include "PolyScenePrimitive.h"
 #include "PolyUIElement.h"
 
 namespace Polycode {
@@ -32,23 +32,36 @@ namespace Polycode {
 	class _PolyExport UIVSizer : public UIElement {
 		public:
 			UIVSizer(Number width, Number height, Number mainHeight, bool topSizer);
-			~UIVSizer();
+			virtual ~UIVSizer();
 			
 			void handleEvent(Event *event);
 			
 			void setMainHeight(Number height);
+			void setMainHeightWithMinimum(Number newHeight);	
 			Number getMainHeight();
 			
 			void addTopChild(UIElement *element);
 			void addBottomChild(UIElement *element);			
 			void Resize(Number width, Number height);
 			
+			UIElement *getTopChild();
+			UIElement *getBottomChild();	
+			void removeTopChild();
+			void removeBottomChild();
+			
 			void updateSizer();
+			
+			void setMinimumSize(Number minimumSize);
+			void setProportionalResize(bool val);
 			
 		protected:
 		
-			ScreenEntity *childElements;			
+			bool proportionalResize;
+					
+			Entity *childElements;			
 			Number mainHeight;
+			
+			Number minimumSize;
 			
 			bool topSizer;
 			
@@ -58,8 +71,8 @@ namespace Polycode {
 			Number baseMouseY;
 			Number baseMainHeight;
 			
-			ScreenShape *separatorHitShape;
-			ScreenShape *separatorBgShape;
+			UIRect *separatorHitShape;
+			UIRect *separatorBgShape;
 			
 			UIElement *firstElement;
 			UIElement *secondElement;			

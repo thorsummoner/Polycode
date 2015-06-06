@@ -41,6 +41,7 @@ NewFileWindow::NewFileWindow() : UIWindow(L"Create New File", 580, 280) {
 	templateContainer->getRootNode()->toggleCollapsed();
 	
 	templateContainer->getRootNode()->addEventListener(this, UITreeEvent::SELECTED_EVENT);
+	templateContainer->getRootNode()->addEventListener(this, UITreeEvent::EXECUTED_EVENT);
 	
 	
 	vector<OSFileEntry> templates = OSBasics::parseFolder(RESOURCE_PATH"FileTemplates", false);
@@ -56,8 +57,8 @@ NewFileWindow::NewFileWindow() : UIWindow(L"Create New File", 580, 280) {
 		}
 	}	
 	
-	ScreenLabel *label2 = new ScreenLabel(L"NEW FILE NAME (NO EXTENSION)", 18, "section", Label::ANTIALIAS_FULL);
-	label2->color.a = 0.4;
+	UILabel *label2 = new UILabel(L"NEW FILE NAME (NO EXTENSION)", 18, "section", Label::ANTIALIAS_FULL);
+	label2->color.a = 1.0;
 	label2->getLabel()->setColorForRange(Color(),0, 12);
 	label2->getLabel()->setColorForRange(Color(0.6, 0.6, 0.6, 1.0),12, 40);
 	label2->setText("NEW FILE NAME (NO EXTENSION)");
@@ -105,22 +106,31 @@ void NewFileWindow::handleEvent(Event *event) {
 	if(event->getEventType() == "UIEvent") {
 		if(event->getEventCode() == UIEvent::CLICK_EVENT) {
 			if(event->getDispatcher() == okButton) {
-				dispatchEvent(new UIEvent(), UIEvent::OK_EVENT);						
+				dispatchEvent(new UIEvent(), UIEvent::OK_EVENT);
 			}
 			
 			if(event->getDispatcher() == cancelButton) {
-				dispatchEvent(new UIEvent(), UIEvent::CLOSE_EVENT);				
+				dispatchEvent(new UIEvent(), UIEvent::CLOSE_EVENT);
 			}									
 		}
 	}
 	}
 	
-	if(event->getEventType() == "UITreeEvent" && event->getEventCode() == UITreeEvent::SELECTED_EVENT) {
-		if(event->getDispatcher() == templateContainer->getRootNode()) {
-			UITreeEvent *treeEvent = (UITreeEvent*) event;
+	if(event->getEventType() == "UITreeEvent") {
+		if (event->getEventCode() == UITreeEvent::SELECTED_EVENT){
+			if (event->getDispatcher() == templateContainer->getRootNode()) {
+				UITreeEvent *treeEvent = (UITreeEvent*)event;
+				FileTemplateUserData *data = (FileTemplateUserData *)treeEvent->selection->getUserData();
+				if (data->type == 1)
+					templatePath = data->templatePath;
+			}
+		}
+		if (event->getEventCode() == UITreeEvent::EXECUTED_EVENT){
+			UITreeEvent *treeEvent = (UITreeEvent*)event;
 			FileTemplateUserData *data = (FileTemplateUserData *)treeEvent->selection->getUserData();
-			if(data->type == 1)
+			if (data->type == 1)
 				templatePath = data->templatePath;
+			dispatchEvent(new UIEvent(), UIEvent::OK_EVENT);
 		}
 	}
 	
@@ -133,7 +143,7 @@ void NewFileWindow::parseTemplatesIntoTree(UITree *tree, OSFileEntry folder) {
 	for(int i=0; i < templates.size(); i++) {
 		OSFileEntry entry = templates[i];	
 		if(entry.type != OSFileEntry::TYPE_FOLDER) {
-			UITree *newChild = tree->addTreeChild("templateIcon.png", entry.nameWithoutExtension, NULL);
+            UITree *newChild = tree->addTreeChild(PolycodeProjectBrowser::getIconForExtension(entry.extension), entry.nameWithoutExtension, NULL);
 			FileTemplateUserData *data = new FileTemplateUserData();
 			data->type = 1;
 			data->templatePath = entry.fullPath;

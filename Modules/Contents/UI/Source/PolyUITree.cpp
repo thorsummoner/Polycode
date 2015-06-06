@@ -26,6 +26,7 @@
 #include "PolyInputEvent.h"
 #include "PolyLabel.h"
 #include "PolyCoreServices.h"
+#include "PolyRenderer.h"
 
 using namespace Polycode;
 
@@ -37,6 +38,7 @@ UITree::UITree(String icon, String text, Number treeWidth, Number treeOffset) : 
 	
 	labelText = text;
 	Config *conf = CoreServices::getInstance()->getConfig();
+    Number uiScale = conf->getNumericValue("Polycode", "uiScale");
 	
 	handleRotation = 0;
 	this->treeWidth = treeWidth;
@@ -48,17 +50,20 @@ UITree::UITree(String icon, String text, Number treeWidth, Number treeOffset) : 
 	cellHeight = conf->getNumericValue("Polycode", "uiTreeCellHeight");
 	this->size = conf->getNumericValue("Polycode", "uiDefaultFontSize");
 	this->arrowIcon = conf->getStringValue("Polycode", "uiTreeArrowIconImage");	
-	textLabel = new ScreenLabel(
+	textLabel = new SceneLabel(
 								text,
 								size,
 								fontName,
 								Label::ANTIALIAS_FULL);
+    textLabel->setBlendingMode(Renderer::BLEND_MODE_NORMAL);
+    
 	textLabel->color.setColorHexFromString(conf->getStringValue("Polycode", "uiTreeFontColor"));
-	
-	bgBox = new ScreenShape(ScreenShape::SHAPE_RECT, treeWidth, cellHeight);	
-	bgBox->setPositionMode(ScreenEntity::POSITION_TOPLEFT);
-	bgBox->setPosition(-treeOffset,0);	
-	bgBox->setColor(1, 1, 1, 0);
+    
+	bgBox = new Entity();
+    bgBox->setWidth(treeWidth);
+    bgBox->setHeight(cellHeight);
+	bgBox->setAnchorPoint(-1.0, -1.0, 0.0);
+    bgBox->visible = false;
 	addChild(bgBox);
 	
 	
@@ -69,24 +74,33 @@ UITree::UITree(String icon, String text, Number treeWidth, Number treeOffset) : 
 	
 	Number padding = conf->getNumericValue("Polycode", "uiTreeCellSelectorSkinPadding");	
 	this->padding = padding;
-	
+    
 	selection = new UIBox(conf->getStringValue("Polycode", "uiTreeCellSelectorSkin"),
 						  st,sr,sb,sl,
 						  treeWidth+(padding*2), cellHeight+(padding*2));
 	
-	selection->setPositionMode(ScreenEntity::POSITION_TOPLEFT);
-	selection->setPosition(-treeOffset-padding,-padding);
+	selection->setAnchorPoint(-1.0, -1.0, 0.0);
 	selection->visible = false;
 	addChild(selection);
-	arrowIconImage = new ScreenImage(arrowIcon.c_str());
-	arrowIconImage->setPosition(cellPadding,(cellHeight-arrowIconImage->getHeight())/2.0f);
+	arrowIconImage = new UIImage(arrowIcon);
+    arrowIconImage->Resize(arrowIconImage->getWidth() / uiScale, arrowIconImage->getHeight() / uiScale);
+    arrowIconImage->setAnchorPoint(0.0, 0.0, 0.0);
+    arrowIconImage->setPosition(treeOffset + (arrowIconImage->getWidth()/2.0) + cellPadding, (cellHeight) / 2.0);
+    
 	addChild(arrowIconImage);
-	iconImage = new ScreenImage(icon.c_str());
+	iconImage = new UIImage(icon);
+    iconImage->Resize(iconImage->getWidth() / uiScale, iconImage->getHeight() / uiScale);
+    
 	addChild(iconImage);
-	iconImage->setPosition(arrowIconImage->getWidth()+(cellPadding*2),(cellHeight-iconImage->getHeight())/2.0f);
-
+    iconImage->setAnchorPoint(-1.0, -1.0, 0.0);
+    iconImage->setPosition(treeOffset + arrowIconImage->getWidth() + cellPadding * 2.0, (cellHeight-iconImage->getHeight()) / 2.0);
+    
+    Number textOffsetX = conf->getNumericValue("Polycode", "uiTreeTextOffsetX");
+    Number textOffsetY = conf->getNumericValue("Polycode", "uiTreeTextOffsetY");
+    
 	addChild(textLabel);
-	textLabel->setPosition(arrowIconImage->getWidth()+iconImage->getWidth()+(cellPadding*3),(int)((cellHeight-(textLabel->getLabel()->getSize()))/2.0f) - 2);
+	textLabel->setPosition(treeOffset + arrowIconImage->getWidth()+iconImage->getWidth()+ textOffsetX + cellPadding * 3.0, textOffsetY);
+    
 	collapsed = false;
 	treeHeight = 0;
 	toggleCollapsed();	
@@ -95,8 +109,7 @@ UITree::UITree(String icon, String text, Number treeWidth, Number treeOffset) : 
 	parent = NULL;
 	selectedNode = NULL;
 	arrowIconImage->addEventListener(this, InputEvent::EVENT_MOUSEDOWN);
-	arrowIconImage->processInputEvents = true;
-	
+	arrowIconImage->processInputEvents = true;	
 	
 	bgBox->addEventListener(this, InputEvent::EVENT_MOUSEUP);
 	bgBox->addEventListener(this, InputEvent::EVENT_MOUSEUP_OUTSIDE);	
@@ -105,7 +118,7 @@ UITree::UITree(String icon, String text, Number treeWidth, Number treeOffset) : 
 	bgBox->addEventListener(this, InputEvent::EVENT_DOUBLECLICK);	
 	bgBox->processInputEvents = true;
 		
-	setPositionMode(ScreenEntity::POSITION_CENTER);
+	setAnchorPoint(0.0, 0.0, 0.0);
 	
 	refreshTree();
 }
@@ -113,7 +126,8 @@ UITree::UITree(String icon, String text, Number treeWidth, Number treeOffset) : 
 void UITree::Resize(Number width) {
 	treeWidth = width;
 	selection->resizeBox(treeWidth+(padding*2), cellHeight+(padding*2));
-	bgBox->setShapeSize(width, cellHeight);
+	bgBox->setWidth(width);
+    bgBox->setHeight(cellHeight);
 	
 	for(int i=0; i < treeChildren.size(); i++) {
 		treeChildren[i]->Resize(width);
@@ -182,7 +196,11 @@ void UITree::handleEvent(Event *event) {
 				}
 			break;						
 			case InputEvent::EVENT_DOUBLECLICK:
-				dispatchEvent(new UITreeEvent(this), UITreeEvent::EXECUTED_EVENT);				
+				if (hasTreeChildren() && ((InputEvent*)event)->getMouseButton() == 0){
+					toggleCollapsed();
+				} else {
+					dispatchEvent(new UITreeEvent(this), UITreeEvent::EXECUTED_EVENT);
+				}
 			break;
 			default:				
 			break;
@@ -261,14 +279,13 @@ void UITree::refreshTree() {
 		for(int i=0; i < treeChildren.size(); i++) {
 			treeChildren[i]->visible = true;
 			treeChildren[i]->enabled = true;
-			treeChildren[i]->setPosition(10,offset);
+			treeChildren[i]->setPosition(0.0,offset);
 			offset += cellHeight + treeChildren[i]->getTreeHeight();
 		}
 		treeHeight = offset - cellHeight;
 	}
-	height = treeHeight + cellHeight;
-	width = treeWidth;
-	setHitbox(width, height);
+	setHeight(treeHeight + cellHeight);
+	setWidth(treeWidth);
 	
 	selection->visible = selected;
 	dispatchEvent(new UITreeEvent(), UITreeEvent::NEED_REFRESH_EVENT);	
@@ -306,10 +323,11 @@ void UITree::clearTree() {
 		delete child;
 	}
 	treeChildren.clear();
+    dispatchEvent(new UITreeEvent(), UITreeEvent::NEED_REFRESH_EVENT);
 }
 
 void UITree::Update() {
-	arrowIconImage->setRotation(handleRotation);
+	arrowIconImage->setRoll(-handleRotation);
 	if(treeChildren.size() > 0)
 		arrowIconImage->visible = true;
 	else

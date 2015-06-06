@@ -24,33 +24,30 @@
 #include "PolyGlobals.h"
 #include "PolyString.h"
 #include "PolyMatrix4.h"
-#include "PolySceneEntity.h"
+#include "PolyEntity.h"
 
 namespace Polycode {
 
 	class Mesh;
 
 	/** 
-	* Skeleton bone. Bones are bound to vertices of a mesh and when transformed, move the bound vertices of the mesh along with them. Bones are subclassed from SceneEntity, but have their own hierarchy system.
+	* Skeleton bone. Bones are bound to vertices of a mesh and when transformed, move the bound vertices of the mesh along with them. Bones are subclassed from Entity, but have their own hierarchy system.
 	* @see Skeleton
 	*/			
-	class _PolyExport Bone : public SceneEntity {
+	class _PolyExport Bone : public Entity {
 		public:
 			/** 
 			* Constructor.
 			* @param boneName Name of the bone.
 			*/				
-			Bone(const String& boneName);
+			explicit Bone(const String& boneName);
 			virtual ~Bone();
-			
-			void enableBoneLabel(const String& labelFont, Number size, Number scale, Color labelColor);
 			
 			/**
 			* Returns the name of the bone.
 			* @return Name of the bone.
 			*/
-			const String& getName() const;
-			void Render();
+			String getName() const;
 
 			/**
 			* Sets the parent bone of this bone.
@@ -141,6 +138,12 @@ namespace Polycode {
 			* @return Full base matrix.
 			*/						
 			Matrix4 getFullBaseMatrix() const;
+        
+            void rebuildFinalMatrix();
+            Matrix4 buildFinalMatrix() const;
+        
+        
+            void intializeBone(const Vector3 &basePosition, const Vector3 &baseScale, const Quaternion &baseRotation, const Vector3 &restPosition, const Vector3 &restScale, const Quaternion &restRotation);
 		
 			/**
 			* Id of the bone.
@@ -150,12 +153,15 @@ namespace Polycode {
 			Matrix4 boneMatrix;
 			Matrix4 restMatrix;
 			Matrix4 baseMatrix;
+            Matrix4 finalMatrix;
 		
-		
-		
+            Quaternion baseRotation;
+            Vector3 baseScale;
+            Vector3 basePosition;
+        
+            bool disableAnimation;
+        
 		protected:
-			Mesh *boneMesh;
-		
 			Bone* parentBone;
 			std::vector<Bone*> childBones;
 			String boneName;

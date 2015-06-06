@@ -115,10 +115,10 @@ PropEvent::~PropEvent() {
 
 PropList::PropList(String caption) : UIElement() {
 
-	setPositionMode(ScreenEntity::POSITION_TOPLEFT);
+	setAnchorPoint(-1.0, -1.0, 0.0);
 
-	bg = new ScreenShape(ScreenShape::SHAPE_RECT, 10,10);
-	bg->setPositionMode(ScreenEntity::POSITION_TOPLEFT);
+	bg = new UIRect(10,10);
+	bg->setAnchorPoint(-1.0, -1.0, 0.0);
 	bg->color.setColorHexFromString(CoreServices::getInstance()->getConfig()->getStringValue("Polycode", "uiBgColor"));
 	
 	addChild(bg);
@@ -127,27 +127,28 @@ PropList::PropList(String caption) : UIElement() {
 	
 	blockMouseInput = true;
 
-	bg2 = new ScreenShape(ScreenShape::SHAPE_RECT, 10,10);
-	bg2->setPositionMode(ScreenEntity::POSITION_TOPLEFT);
+	bg2 = new UIRect(10,10);
+	bg2->setAnchorPoint(-1.0, -1.0, 0.0);
 	bg2->color.setColorHexFromString(CoreServices::getInstance()->getConfig()->getStringValue("Polycode", "uiHeaderBgColor"));
 	
 	addChild(bg2);
 
-	ScreenLabel *label = new ScreenLabel(caption, 18, "section", Label::ANTIALIAS_FULL);
+	UILabel *label = new UILabel(caption, 18, "section", Label::ANTIALIAS_FULL);
 	label->color.setColorHexFromString(CoreServices::getInstance()->getConfig()->getStringValue("Polycode", "uiHeaderFontColor"));
 	addChild(label);
 	label->setPosition(10, 3);
 
-	propContents = new ScreenEntity();
+	propContents = new Entity();
 	propContents->processInputEvents = true;
 		
 	scrollContainer = new UIScrollContainer(propContents, false, true, 100, 100);
 	scrollContainer->setPosition(0, 30);
 	addChild(scrollContainer);
+    
+    ownsChildren = true;
 }
 
 PropList::~PropList() {
-
 }
 		
 void PropList::updateProps() {
@@ -158,7 +159,7 @@ void PropList::updateProps() {
 }
 
 void PropList::updateSize() {
-	Resize(width, height);
+	Resize(getWidth(), getHeight());
 	scrollContainer->setScrollValue(0, 0);	
 }
 		
@@ -168,30 +169,31 @@ void PropList::Resize(Number width, Number height) {
 		
 	scrollContainer->Resize(width, height-30);
 	
-	bg->setShapeSize(width, height);
-	bg2->setShapeSize(width, 30);	
+	bg->Resize(width, height);
+	bg2->Resize(width, 30);	
 	
 	Number offsetY = 0;
+    Number resizeHeight = height;
 	for(int i=0; i < props.size(); i++) {
 		props[i]->setPosition(0, offsetY);
 		if(props[i]->enabled) {
-		if(props[i]->collapsed) {
-			offsetY += 30;
-		} else {
-			offsetY += props[i]->propHeight;
+            if(props[i]->collapsed) {
+                offsetY += 30;
+            } else {
+                offsetY += props[i]->propHeight;
+            }
 		}
-		}
-		props[i]->Resize(width, height);
+		props[i]->Resize(getWidth(), resizeHeight);
+        resizeHeight -= offsetY;        
 	}
 	
 	rebuildTransformMatrix();
-	
 	scrollContainer->setContentSize(width, offsetY);
 }
 
 void PropList::handleEvent(Event *event) {
 	if(event->getEventType() == "" && event->getEventCode() == Event::COMPLETE_EVENT) {
-		Resize(width, height);
+		Resize(getWidth(), getHeight());
 	} else if(event->getEventCode() == Event::CHANGE_EVENT) {
 	
 	}
@@ -200,7 +202,7 @@ void PropList::handleEvent(Event *event) {
 void PropList::addPropSheet(PropSheet *sheet) {
 	propContents->addChild(sheet);
 	props.push_back(sheet);
-	Resize(width, height);
+	Resize(getWidth(), getHeight());
 	sheet->addEventListener(this, Event::COMPLETE_EVENT);
 	sheet->addEventListener(this, Event::CHANGE_EVENT);	
 }
@@ -211,35 +213,35 @@ PropSheet::PropSheet(String caption, String type) : UIElement() {
 	
 	customUndoHandler = false;
 	
-	bg = new ScreenShape(ScreenShape::SHAPE_RECT, 30,30);
+	bg = new UIRect(30,30);
 	addChild(bg);
 	bg->color.setColorHexFromString(CoreServices::getInstance()->getConfig()->getStringValue("Polycode", "uiSmallHeaderBgColor"));
-	bg->setPositionMode(ScreenEntity::POSITION_TOPLEFT);
+	bg->setAnchorPoint(-1.0, -1.0, 0.0);
 	
-	ScreenLabel *label = new ScreenLabel(caption, 18, "section", Label::ANTIALIAS_FULL);
-	label->color.a = 0.5;
+	UILabel *label = new UILabel(caption, 18, "section", Label::ANTIALIAS_FULL);
+	label->color.a = 1.0;
 	addChild(label);
 	label->setPosition(25, 3);	
 	
-	contents = new ScreenEntity();
+	contents = new Entity();
 	contents->processInputEvents = true;
 	addChild(contents);
 	contents->setPosition(20,35);
 	
-	collapseButton = new UIImageButton("Images/collapse.png");
+	collapseButton = new UIImageButton("main/collapse.png", 1.0, 12, 12);
 	addChild(collapseButton);
 	collapseButton->addEventListener(this, UIEvent::CLICK_EVENT);
 	collapseButton->setPosition(5, 9);
 
-	expandButton = new UIImageButton("Images/expand.png");
+	expandButton = new UIImageButton("main/expand.png", 1.0, 12, 12);
 	addChild(expandButton);
 	expandButton->addEventListener(this, UIEvent::CLICK_EVENT);	
 	expandButton->setPosition(5, 9);
 	expandButton->enabled = false;
 		
 	collapsed  = false;
-	
-	propHeight = 30;
+	propTopPadding = 0;
+	propHeight = 0;
 }
 
 void PropSheet::setCollapsed(bool val) {
@@ -285,19 +287,33 @@ PropSheet::~PropSheet() {
 
 }
 
+void PropSheet::setTopPadding(Number padding) {
+	propTopPadding = padding;
+}
+
 void PropSheet::Resize(Number width, Number height) {
 	setWidth(width);
 	setHeight(height);
-	
-	bg->setShapeSize(width, 30);
-	
-	Number yOffset = 0;
-	
+	bg->Resize(width, 30);
+
+	layoutProps();
+}
+
+void PropSheet::layoutProps() {
+	Number yOffset = propTopPadding;
 	for(int i=0; i < props.size(); i++) {
-		props[i]->setPosition(0, yOffset);
-		props[i]->setPropWidth(width);
-		yOffset += props[i]->getHeight();
+        if(props[i]->enabled) {
+            props[i]->setPosition(0, yOffset);
+            props[i]->setPropWidth(getWidth());
+            yOffset += props[i]->getHeight();
+        }
 	}
+    Number newPropHeight = yOffset + contents->getPosition().y;
+    if(newPropHeight != propHeight) {
+        propHeight = newPropHeight;
+        dispatchEvent(new Event(), Event::COMPLETE_EVENT);
+    }
+
 }
 
 void PropSheet::addProp(PropProp *prop) {
@@ -305,7 +321,7 @@ void PropSheet::addProp(PropProp *prop) {
 	props.push_back(prop);
 	prop->addEventListener(this, Event::CHANGE_EVENT);
 	prop->addEventListener(this, PropEvent::EVENT_PROP_CHANGE);	
-	Resize(width, height);
+	Resize(getWidth(), getHeight());
 }
 
 
@@ -313,17 +329,19 @@ void PropSheet::applyPropActionData(PolycodeEditorPropActionData *data) {
 	data->prop->setPropData(data);
 }
 
+void PropProp::setPropName(String newName) {
+    label->setText(newName);
+}
 
 PropProp::PropProp(String caption, String type) : UIElement() {
 
 	suppressChangeEvent = false;
 	propType = type;
-	label = new ScreenLabel(caption, 12);
-	label->color.a = 0.4;
+	label = new UILabel(caption, 11);
 	label->setPosition(0, 5);
 	addChild(label);
 	
-	propContents = new ScreenEntity();
+	propContents = new Entity();
 	propContents->processInputEvents = true;
 	addChild(propContents);
 	propContents->setPosition(100, 0);
@@ -335,15 +353,125 @@ PropProp::~PropProp() {
 
 }
 
+ButtonProp::ButtonProp(const String &caption) : PropProp("", "ButtonProp") {
+    button = new UIButton(caption, 100);
+    addChild(button);
+    setHeight(25);
+}
+
+ButtonProp::~ButtonProp() {
+    
+}
+
+UIButton *ButtonProp::getButton() {
+    return button;
+}
+
+void ButtonProp::setPropWidth(Number width) {
+    button->Resize(width-PROP_PADDING, button->getHeight());
+}
+
+
+Vector3Prop::Vector3Prop(String caption) : PropProp(caption, "Vector3") {
+    
+    xInput = NULL;
+    yInput = NULL;
+    zInput = NULL;
+    
+	labelX = new UILabel("X:", 11);
+	labelX->color.a = 1.0;
+	propContents->addChild(labelX);
+	labelX->setPosition(-20, 5);
+    
+	labelY = new UILabel("Y:", 11);
+	labelY->color.a = 1.0;
+	propContents->addChild(labelY);
+	labelY->setPosition(-20, 25);
+
+    labelZ = new UILabel("Z:", 11);
+	labelZ->color.a = 1.0;
+	propContents->addChild(labelZ);
+	labelZ->setPosition(-20, 45);
+    
+	xInput = new UITextInput(false, 50, 12);
+	xInput->addEventListener(this, UIEvent::CHANGE_EVENT);
+	xInput->setText("0");
+	xInput->setNumberOnly(true);
+	propContents->addChild(xInput);
+	xInput->setPosition(0, 0);
+
+   	yInput = new UITextInput(false, 50, 12);
+	yInput->addEventListener(this, UIEvent::CHANGE_EVENT);
+	yInput->setText("0");
+	yInput->setNumberOnly(true);
+	propContents->addChild(yInput);
+	yInput->setPosition(0, 20);
+
+    zInput = new UITextInput(false, 50, 12);
+	zInput->addEventListener(this, UIEvent::CHANGE_EVENT);
+	zInput->setText("0");
+	zInput->setNumberOnly(true);
+	propContents->addChild(zInput);
+	zInput->setPosition(0, 40);
+
+	setHeight(65);
+}
+
+void Vector3Prop::setPropWidth(Number width) {
+    xInput->Resize(width-PROP_PADDING-propContents->getPosition().x, xInput->getHeight());
+    yInput->Resize(width-PROP_PADDING-propContents->getPosition().x, yInput->getHeight());
+    zInput->Resize(width-PROP_PADDING-propContents->getPosition().x, zInput->getHeight());
+}
+
+void Vector3Prop::handleEvent(Event *event) {
+
+	if(event->getDispatcher() == xInput || event->getDispatcher() == yInput || event->getDispatcher() == zInput) {
+		if(event->getEventCode() == UIEvent::CHANGE_EVENT) {
+            
+            if(xInput && yInput && zInput) {
+                lastData = currentData;
+                currentData = Vector3(atof(xInput->getText().c_str()), atof(yInput->getText().c_str()), atof(zInput->getText().c_str()));
+            }
+			if(!suppressChangeEvent) {
+				dispatchEvent(new Event(), Event::CHANGE_EVENT);
+				dispatchEvent(new PropEvent(this, NULL, PropDataVector3(lastData), PropDataVector3(currentData)), PropEvent::EVENT_PROP_CHANGE);
+                
+			}
+		}
+	}
+
+}
+
+void Vector3Prop::setPropData(PolycodeEditorPropActionData* data) {
+	set(data->vector3Val);
+	dispatchEvent(new Event(), Event::CHANGE_EVENT);
+}
+
+void Vector3Prop::set(const Vector3 &position) {
+	suppressChangeEvent = true;
+	xInput->setText(String::NumberToString(position.x, 5));
+	yInput->setText(String::NumberToString(position.y, 5));
+	zInput->setText(String::NumberToString(position.z, 5));
+	suppressChangeEvent = false;
+}
+
+Vector3 Vector3Prop::get() const {
+	return Vector3(atof(xInput->getText().c_str()), atof(yInput->getText().c_str()), atof(zInput->getText().c_str()));
+}
+
+Vector3Prop::~Vector3Prop() {
+    
+}
+
 Vector2Prop::Vector2Prop(String caption) : PropProp(caption, "Vector2") {
 
-	labelX = new ScreenLabel("X:", 11);
-	labelX->color.a = 0.4;
+	labelX = new UILabel("X:", 11);
+	labelX->color.a = 1.0;
 	propContents->addChild(labelX);
 	labelX->setPosition(-20, 6);	
 
-	labelY = new ScreenLabel("Y:", 11);
-	labelY->color.a = 0.4;
+	labelY = new UILabel("Y:", 11);
+	labelY->color.a = 1.0;
 	propContents->addChild(labelY);
 	labelY->setPosition(60, 6);	
 	
@@ -364,19 +492,19 @@ Vector2Prop::Vector2Prop(String caption) : PropProp(caption, "Vector2") {
 	propContents->addChild(positionY);
 	positionY->setPosition(80, 0);
 
-	setHeight(30);
+	setHeight(25);
 
 }
 
 void Vector2Prop::setPropWidth(Number width) {
 	labelX->setPosition(0, 6);
-	labelY->setPosition(((width-propContents->position.x-PROP_PADDING)/2.0), 6);	
+	labelY->setPosition(((width-propContents->getPosition().x-PROP_PADDING)/2.0), 6);	
 	
-	positionX->position.x = labelX->position.x + 20;
-	positionX->Resize(floor(((width-propContents->position.x-PROP_PADDING)/2.0)-25), positionX->getHeight());
+	positionX->setPositionX(labelX->getPosition().x + 20);
+	positionX->Resize(floor(((width-propContents->getPosition().x-PROP_PADDING)/2.0)-25), positionX->getHeight());
 
-	positionY->position.x = labelY->position.x + 20;
-	positionY->Resize(floor(((width-propContents->position.x-PROP_PADDING)/2.0)-25), positionY->getHeight());
+	positionY->setPositionX(labelY->getPosition().x + 20);
+	positionY->Resize(floor(((width-propContents->getPosition().x-PROP_PADDING)/2.0)-25), positionY->getHeight());
 
 }
 
@@ -417,6 +545,158 @@ Vector2Prop::~Vector2Prop() {
 
 }
 
+RemovableStringProp::RemovableStringProp(const String &caption) : PropProp("", "RemovableStringProp") {
+    
+    label = new UILabel(caption, 12);
+    addChild(label);
+    label->setPositionX(30);
+    
+   	removeButton = new UIImageButton("main/remove_icon.png", 1.0, 12, 12);
+	removeButton->addEventListener(this, UIEvent::CLICK_EVENT);
+    addChild(removeButton);
+	removeButton->setPosition(0, 2);
+
+	setHeight(25);
+}
+
+String RemovableStringProp::getCaption() {
+    return label->getText();
+}
+
+RemovableStringProp::~RemovableStringProp() {
+    
+}
+
+void RemovableStringProp::handleEvent(Event *event) {
+    if(event->getDispatcher() == removeButton) {
+        dispatchEvent(new Event(), Event::REMOVE_EVENT);
+    }
+}
+
+LayerProp::LayerProp(SceneEntityInstance *instance, SceneEntityInstanceLayer *layer) : PropProp("", "Layer") {
+	layerID = 0;
+
+    bgRect = new UIRect(1.0, 1.0);
+    bgRect->color.setColorHexFromString(CoreServices::getInstance()->getConfig()->getStringValue("Polycode", "uiHeaderBgColor"));
+
+    propContents->addChild(bgRect);
+    
+    this->layer = layer;
+    this->instance = instance;
+    
+    layerID = layer->layerID;
+    
+    removeLayerButton = new UIImageButton("main/remove_icon.png", 1.0, 12, 12);
+    propContents->addChild(removeLayerButton);
+    removeLayerButton->setPosition(-95, 5.0);
+    removeLayerButton->addEventListener(this, UIEvent::CLICK_EVENT);
+    
+    hideLayerButton = new UIImageButton("entityEditor/visible_button.png", 1.0, 24, 24);
+    propContents->addChild(hideLayerButton);
+    hideLayerButton->setPosition(-95, 0.0);
+    hideLayerButton->addEventListener(this, UIEvent::CLICK_EVENT);
+
+    
+    showLayerButton = new UIImageButton("entityEditor/invisible_button.png", 1.0, 24, 24);
+    propContents->addChild(showLayerButton);
+    showLayerButton->setPosition(-95, 0.0);
+    showLayerButton->addEventListener(this, UIEvent::CLICK_EVENT);
+    showLayerButton->visible = false;
+    showLayerButton->enabled = false;
+    
+    moreButton = new UIImageButton("entityEditor/button_more.png", 1.0, 24, 24);
+    propContents->addChild(moreButton);
+    moreButton->setPosition(-70, 0.0);
+    moreButton->addEventListener(this, UIEvent::CLICK_EVENT);
+    
+    
+    layerName = new UILabel(layer->name, 12);
+    layerName->setColor(1.0, 1.0, 1.0, 1.0);
+    propContents->addChild(layerName);
+    layerName->setPosition(-40, 5.0);
+    
+    if(layerID == 0) {
+        moreButton->visible = false;
+        moreButton->enabled = false;
+        removeLayerButton->visible = false;
+        removeLayerButton->enabled = false;
+    }
+    
+    if(layer->visible) {
+        hideLayerButton->visible = true;
+        hideLayerButton->enabled = true;
+        showLayerButton->visible = false;
+        showLayerButton->enabled = false;
+    } else {
+        hideLayerButton->visible = false;
+        hideLayerButton->enabled = false;
+        showLayerButton->visible = true;
+        showLayerButton->enabled = true;
+    }
+    
+    menu = NULL;
+    
+	setHeight(25);
+}
+
+void LayerProp::setInstance(SceneEntityInstance *instance) {
+    this->instance = instance;
+}
+
+LayerProp::~LayerProp() {
+    
+}
+
+void LayerProp::handleEvent(Event *event) {
+    if(!instance) {
+        return;
+    }
+    
+    if(event->getDispatcher() == hideLayerButton) {
+        hideLayerButton->visible = false;
+        hideLayerButton->enabled = false;
+        showLayerButton->visible = true;
+        showLayerButton->enabled = true;
+        layer->setLayerVisibility(false);
+    } else if(event->getDispatcher() == showLayerButton) {
+        hideLayerButton->visible = true;
+        hideLayerButton->enabled = true;
+        showLayerButton->visible = false;
+        showLayerButton->enabled = false;
+        layer->setLayerVisibility(true);
+    } else if(event->getDispatcher() == removeLayerButton) {
+        dispatchEvent(new Event(), Event::REMOVE_EVENT);
+    } else if(event->getDispatcher() == moreButton) {
+        menu = globalMenu->showMenuAtMouse(150);
+        menu->addOption("Rename", "rename");
+        menu->addEventListener(this, UIEvent::OK_EVENT);
+    } else if(event->getDispatcher() == menu) {
+        menu->removeAllHandlersForListener(this);
+        String command = menu->getSelectedItem()->getMenuItemID();
+        if(command == "rename") {
+            globalFrame->textInputPopup->action = "renameLayer";
+            globalFrame->textInputPopup->setCaption("Rename layer");
+            globalFrame->textInputPopup->setValue(layer->name);
+            globalFrame->textInputPopup->addEventListener(this, UIEvent::OK_EVENT);
+            globalFrame->showModal(globalFrame->textInputPopup);
+            
+        }
+    } else if(event->getDispatcher() == globalFrame->textInputPopup) {
+        globalFrame->textInputPopup->removeAllHandlersForListener(this);
+        if(globalFrame->textInputPopup->action == "renameLayer") {
+            layer->name = globalFrame->textInputPopup->getValue();
+            layerName->setText(layer->name);
+        }
+    }
+}
+
+void LayerProp::setPropWidth(Number width) {
+    bgRect->Resize(width-PROP_PADDING, 24.0);
+    bgRect->setPosition(-propContents->getPosition().x, 0.0);
+    
+    removeLayerButton->setPosition(width-PROP_PADDING-propContents->getPosition().x-20, 5.0);
+}
+
 CustomProp::CustomProp(String key, String value) : PropProp("", "Custom") {
 	keyEntry = new UITextInput(false, 120, 12);
 	keyEntry->setText(key);
@@ -430,22 +710,26 @@ CustomProp::CustomProp(String key, String value) : PropProp("", "Custom") {
 	propContents->addChild(valueEntry);
 	valueEntry->setPosition(45, 0);
 	
-	removeButton = new UIImageButton("Images/remove_icon.png");
+	removeButton = new UIImageButton("main/remove_icon.png", 1.0, 12, 12);
 	removeButton->addEventListener(this, UIEvent::CLICK_EVENT);	
 	propContents->addChild(removeButton);
 	removeButton->setPosition(-110, 6);
 	
-	setHeight(30);
+	setHeight(25);
 
+}
+
+void CustomProp::setPropWidth(Number width) {
+    Number halfWidth = (width-PROP_PADDING-10) * 0.5;
+    keyEntry->Resize(halfWidth, keyEntry->getHeight());
+    valueEntry->Resize(halfWidth, valueEntry->getHeight());
+    valueEntry->setPositionX(keyEntry->getPosition().x + halfWidth);
 }
 
 CustomProp::~CustomProp() {
 	keyEntry->removeAllHandlersForListener(this);
 	valueEntry->removeAllHandlersForListener(this);
 	removeButton->removeAllHandlersForListener(this);
-	delete removeButton;
-	delete keyEntry;
-	delete valueEntry;
 }
 
 void CustomProp::handleEvent(Event *event) {
@@ -481,12 +765,12 @@ StringProp::StringProp(String caption) : PropProp(caption, "String") {
 	stringEntry->setText("");
 	propContents->addChild(stringEntry);
 	stringEntry->setPosition(0, 0);
-	setHeight(30);
+	setHeight(25);
 }
 
 void StringProp::setPropWidth(Number width) {
-	stringEntry->Resize(floor((width - PROP_PADDING) * 0.5), stringEntry->getHeight());	
-	stringEntry->setPosition(width-105-PROP_PADDING-stringEntry->getWidth(), 2);
+    stringEntry->Resize(width-PROP_PADDING-propContents->getPosition().x, stringEntry->getHeight());
+	stringEntry->setPosition(0.0, 2);
 	
 }
 
@@ -527,19 +811,20 @@ SliderProp::SliderProp(String caption, Number min, Number max) : PropProp(captio
 	
 	slider = new UIHSlider(min, max, 100);
 	slider->addEventListener(this, UIEvent::CHANGE_EVENT);
-	slider->setPosition(5, 8);
+	slider->setPosition(0, 8);
+    slider->setContinuous(false);
 	propContents->addChild(slider);
 	
-	valueLabel = new ScreenLabel("0.0", 10);
+	valueLabel = new UILabel("0.0", 10);
 	propContents->addChild(valueLabel);
 	valueLabel->setPosition(120, 5);
-	valueLabel->color.a = 0.6;
-	setHeight(30);
+	valueLabel->color.a = 1.0;
+	setHeight(25);
 }
 
 void SliderProp::setPropWidth(Number width) {
-	slider->Resize(width - propContents->position.x - PROP_PADDING - 50, slider->getHeight());
-	valueLabel->setPosition(width - propContents->position.x - PROP_PADDING - 30, 5);	
+	slider->Resize(width - propContents->getPosition().x - PROP_PADDING - 50, slider->getHeight());
+	valueLabel->setPosition(width - propContents->getPosition().x - PROP_PADDING - 30, 5);
 }
 
 void SliderProp::handleEvent(Event *event) {
@@ -583,20 +868,20 @@ SliderProp::~SliderProp() {
 
 NumberProp::NumberProp(String caption) : PropProp(caption, "Number") {
 
-	numberEntry = new UITextInput(false, 50, 12);
+	numberEntry = new UITextInput(false, 50, 20);
 	numberEntry->addEventListener(this, UIEvent::CHANGE_EVENT);
 	numberEntry->setText("0");
 	numberEntry->setNumberOnly(true);
 	propContents->addChild(numberEntry);
 	numberEntry->setPosition(0, 2);
 
-	setHeight(30);
+	setHeight(25);
 
 }
 
 void NumberProp::setPropWidth(Number width) {
-	numberEntry->Resize(floor((width - PROP_PADDING) * 0.5), numberEntry->getHeight());	
-	numberEntry->setPosition(width-105-PROP_PADDING-numberEntry->getWidth(), 2);
+    numberEntry->Resize(width-PROP_PADDING-propContents->getPosition().x, numberEntry->getHeight());
+	numberEntry->setPosition(0.0, 2);
 }
 
 void NumberProp::setPropData(PolycodeEditorPropActionData* data) {
@@ -637,9 +922,9 @@ ColorProp::ColorProp(String caption) : PropProp(caption, "Color") {
 
 	colorEntry = new UIColorBox(globalColorPicker, Color(), 45, 25);
 	colorEntry->addEventListener(this, UIEvent::CHANGE_EVENT);
-	colorEntry->setPosition(0, -2);
+	colorEntry->setPosition(-2, 0);
 	propContents->addChild(colorEntry);
-	setHeight(30);
+	setHeight(25);
 
 }
 
@@ -685,11 +970,11 @@ ComboProp::ComboProp(String caption) : PropProp(caption, "Combo") {
 	comboEntry->addEventListener(this, UIEvent::CHANGE_EVENT);
 	propContents->addChild(comboEntry);
 	comboEntry->setPosition(-3, 0);
-	setHeight(30);
+	setHeight(25);
 }
 
 void ComboProp::setPropWidth(Number width) {
-	comboEntry->Resize(width - propContents->position.x - PROP_PADDING, comboEntry->getHeight());
+	comboEntry->Resize(width - propContents->getPosition().x - PROP_PADDING, comboEntry->getHeight());
 }
 
 void ComboProp::setPropData(PolycodeEditorPropActionData* data) {
@@ -729,9 +1014,9 @@ BoolProp::BoolProp(String caption) : PropProp(caption, "Bool") {
 
 	checkEntry = new UICheckBox("", false);
 	checkEntry->addEventListener(this, UIEvent::CHANGE_EVENT);
-	checkEntry->setPosition(0, 2);
+	checkEntry->setPosition(0, 4);
 	propContents->addChild(checkEntry);
-	setHeight(30);
+	setHeight(25);
 
 }
 
@@ -769,10 +1054,10 @@ BoolProp::~BoolProp() {
 
 SoundProp::SoundProp(String caption) : PropProp(caption, "Sound"){
 
-	soundFile = new ScreenLabel("", 11);
+	soundFile = new UILabel("", 11);
 	soundFile->setPosition(0, 5);
 	propContents->addChild(soundFile);	
-	soundFile->color.a = 0.6;
+	soundFile->color.a = 1.0;
 
 	playButton = new UIButton("Play", 50);
 	propContents->addChild(playButton);
@@ -858,7 +1143,7 @@ BezierRGBACurveProp::BezierRGBACurveProp(String caption) : PropProp(caption, "Be
 	changeButton->setPosition(0, 0);
 	changeButton->addEventListener(this, UIEvent::CLICK_EVENT);
 
-	setHeight(30);
+	setHeight(25);
 	
 	curveR = NULL;
 	curveG = NULL;
@@ -892,7 +1177,7 @@ BezierCurveProp::BezierCurveProp(String caption, String curveName) : PropProp(ca
 	changeButton->setPosition(0, 0);
 	changeButton->addEventListener(this, UIEvent::CLICK_EVENT);
 
-	setHeight(30);
+	setHeight(25);
 	
 	curve = NULL;
 }
@@ -911,9 +1196,127 @@ void BezierCurveProp::handleEvent(Event *event) {
 	}
 }
 
+MaterialProp::MaterialProp(const String &caption) : PropProp(caption, "Material"){
+    currentMaterial = NULL;
+    
+	previewShape = new UIRect(48, 48);
+	previewShape->setAnchorPoint(-1.0, -1.0, 0.0);
+	previewShape->setPosition(2, 1);
+	propContents->addChild(previewShape);
+    
+	changeButton = new UIButton("Change", 80);
+	propContents->addChild(changeButton);
+	changeButton->setPosition(60, 5);
+	changeButton->addEventListener(this, UIEvent::CLICK_EVENT);
+	
+	materialLabel = new UILabel("", 12, "sans");
+	propContents->addChild(materialLabel);
+	materialLabel->setPosition(-100, 32);
+	materialLabel->color.a = 1.0;
+    
+    previewScene = new Scene(Scene::SCENE_3D, true);
+    
+    previewScene->rootEntity.setOwnsChildrenRecursive(true);
+    
+	ScenePrimitive *previewBg = new ScenePrimitive(ScenePrimitive::TYPE_BOX, 15.0, 15.0, 15.0);
+	previewBg->Yaw(45.0);
+	previewBg->backfaceCulled = false;
+	
+	previewBg->setMaterialByName("Unlit");
+	Texture *tex = CoreServices::getInstance()->getMaterialManager()->createTextureFromFile("materialEditor/material_grid.png");
+	if(previewBg->getLocalShaderOptions()) {
+        previewBg->getLocalShaderOptions()->addTexture("diffuse", tex);
+	}
+	previewScene->addChild(previewBg);
+	
+   	renderTexture = new SceneRenderTexture(previewScene, previewScene->getDefaultCamera(), 48*2, 48*2);
+    
+	previewScene->clearColor.setColor(0.1, 0.1, 0.1, 0.0);
+	previewScene->ambientColor.setColor(0.2, 0.2, 0.2, 1.0);
+    
+	previewPrimitive = new ScenePrimitive(ScenePrimitive::TYPE_SPHERE, 3.0, 16, 16);
+	previewScene->addChild(previewPrimitive);
+	previewPrimitive->getMesh()->calculateTangents();
+  	
+	mainLight = new SceneLight(SceneLight::POINT_LIGHT, previewScene, 290.0);
+	mainLight->setPosition(-10,10,10);
+	previewScene->addLight(mainLight);
+    
+	secondLight = new SceneLight(SceneLight::POINT_LIGHT, previewScene, 250.0);
+	secondLight->setPosition(10,-10,10);
+	previewScene->addLight(secondLight);
+    
+	
+	previewScene->getDefaultCamera()->setPosition(0,5,8);
+	previewScene->getDefaultCamera()->lookAt(Vector3());
+    
+    previewShape->setTexture(renderTexture->getTargetTexture());
+    
+    
+	setHeight(60);
+}
+
+void MaterialProp::setEntityInstance(SceneEntityInstance *instance) {
+    entityInstance = instance;
+}
+
+MaterialProp::~MaterialProp() {
+    delete renderTexture;
+    delete previewScene;
+}
+
+void MaterialProp::handleEvent(Event *event) {
+    
+	if(event->getDispatcher() == globalFrame->assetBrowser && event->getEventType() == "UIEvent" && event->getEventCode() == UIEvent::OK_EVENT) {
+        
+            Resource *selectedResource = globalFrame->assetBrowser->getSelectedResource();
+            if(selectedResource) {
+                Material *material = (Material*) selectedResource;
+                set(material);
+                dispatchEvent(new Event(), Event::CHANGE_EVENT);
+                globalFrame->assetBrowser->removeAllHandlersForListener(this);
+            }
+
+        /*
+		dispatchEvent(new PropEvent(this, NULL, PropDataString(lastData), PropDataString(currentData)), PropEvent::EVENT_PROP_CHANGE);
+         */
+		globalFrame->hideModal();
+		
+	}
+    
+	if(event->getDispatcher() == changeButton && event->getEventType() == "UIEvent" && event->getEventCode() == UIEvent::CLICK_EVENT) {
+		globalFrame->assetBrowser->addEventListener(this, UIEvent::OK_EVENT);
+		
+		std::vector<ResourcePool*> pools;
+        pools.push_back(CoreServices::getInstance()->getResourceManager()->getGlobalPool());
+        for(int i=0; i < entityInstance->getNumLinkedResourePools(); i++) {
+            pools.push_back(entityInstance->getLinkedResourcePoolAtIndex(i));
+        }
+		globalFrame->showAssetBrowserForPools(pools, Resource::RESOURCE_MATERIAL);
+	}
+}
+
+void MaterialProp::set(Material *material) {
+    currentMaterial = material;
+    previewPrimitive->setMaterial(material);
+    if(material) {
+        materialLabel->setText(material->getName());
+    }
+}
+
+Material *MaterialProp::get() {
+    return currentMaterial;
+}
+
+void MaterialProp::setPropWidth(Number width) {
+	changeButton->setPosition(width-changeButton->getWidth()-PROP_PADDING-100, 5);
+	previewShape->setPosition(changeButton->getPosition().x-48-10, 1);
+}
+
+
 TextureProp::TextureProp(String caption) : PropProp(caption, "Texture"){
-	previewShape = new ScreenShape(ScreenShape::SHAPE_RECT, 48, 48);
-	previewShape->setPositionMode(ScreenEntity::POSITION_TOPLEFT);
+	previewShape = new UIRect(48, 48);
+	previewShape->setAnchorPoint(-1.0, -1.0, 0.0);
 	previewShape->setPosition(2, 1);
 	propContents->addChild(previewShape);
 
@@ -922,12 +1325,13 @@ TextureProp::TextureProp(String caption) : PropProp(caption, "Texture"){
 	changeButton->setPosition(60, 5);
 	changeButton->addEventListener(this, UIEvent::CLICK_EVENT);
 	
-	textureLabel = new ScreenLabel("", 12, "sans");
+	textureLabel = new UILabel("", 12, "sans");
 	propContents->addChild(textureLabel);
 	textureLabel->setPosition(-100, 32);
-	textureLabel->color.a = 0.3;
+	textureLabel->color.a = 1.0;
 		
-	setHeight(60);	
+	setHeight(60);
+    ownsChildren = true;
 }
 
 void TextureProp::setPropWidth(Number width) {
@@ -936,7 +1340,7 @@ void TextureProp::setPropWidth(Number width) {
 }
 
 TextureProp::~TextureProp() {
-
+    
 }
 
 void TextureProp::setPropData(PolycodeEditorPropActionData* data) {
@@ -961,6 +1365,10 @@ void TextureProp::handleEvent(Event *event) {
 		
 		std::vector<String> extensions;
 		extensions.push_back("png");
+		extensions.push_back("hdr");
+		extensions.push_back("jpg");
+		extensions.push_back("psd");
+		extensions.push_back("tga");
 		globalFrame->showAssetBrowser(extensions);
 	}
 }
@@ -968,6 +1376,11 @@ void TextureProp::handleEvent(Event *event) {
 void TextureProp::set(Texture *texture) {
 	previewShape->setTexture(texture);
 	
+    if(!texture) {
+        textureLabel->setText("<None>");
+        return;
+    }
+    
 	lastData = currentData;
 	currentData = texture->getResourcePath();
 	
@@ -980,78 +1393,120 @@ Texture* TextureProp::get() {
 	return previewShape->getTexture();
 }
 
-ScreenSpriteProp::ScreenSpriteProp(String caption) : PropProp(caption, "ScreenSprite"){
+SceneSpriteProp::SceneSpriteProp(String caption) : PropProp(caption, "SceneSprite"){
 
-		previewSprite = new ScreenSprite("default/default.sprite");
-		previewSprite->setPositionMode(ScreenEntity::POSITION_TOPLEFT);
-		previewSprite->setPosition(2, 1);
-		previewSprite->setShapeSize(48,48);		
-		propContents->addChild(previewSprite);	
-
-	
+	previewSprite = NULL;
+    
 	changeButton = new UIButton("Change", 80);
 	propContents->addChild(changeButton);
 	changeButton->setPosition(60, 5);
 	changeButton->addEventListener(this, UIEvent::CLICK_EVENT);
-	setHeight(70);
+	setHeight(55);
+    
+	spriteName = new UILabel("", 12, "sans");
+	propContents->addChild(spriteName);
+	spriteName->setPosition(-100, 32);
+	spriteName->color.a = 1.0;
+    
 }
 
-ScreenSpriteProp::~ScreenSpriteProp() {
+SceneSpriteProp::~SceneSpriteProp() {
 
 }
 
-void ScreenSpriteProp::handleEvent(Event *event) {
+void SceneSpriteProp::setEntityInstance(SceneEntityInstance *instance) {
+    entityInstance = instance;
+}
+
+void SceneSpriteProp::handleEvent(Event *event) {
 
 	if(event->getDispatcher() == globalFrame->assetBrowser && event->getEventType() == "UIEvent" && event->getEventCode() == UIEvent::OK_EVENT) {
-		String filePath = globalFrame->assetBrowser->getSelectedAssetPath();
-		
-		set(filePath);
-		
-		globalFrame->assetBrowser->removeAllHandlersForListener(this);
-		dispatchEvent(new Event(), Event::CHANGE_EVENT);
-		dispatchEvent(new PropEvent(this, NULL, PropDataString(lastData), PropDataString(currentData)), PropEvent::EVENT_PROP_CHANGE);
-		globalFrame->hideModal();
+        
+        Resource *selectedResource = globalFrame->assetBrowser->getSelectedResource();
+        
+        if(selectedResource) {
+            sprite = (Sprite*) selectedResource;
+            previewSprite->setSprite(sprite);
+            
+            if(sprite->getNumStates() > 0) {
+                previewSprite->setSpriteState(sprite->getState(0), 0, false);
+            }
+            
+            Number spriteScale = 1.0;
+            if(previewSprite->getHeight() > previewSprite->getWidth()) {
+                spriteScale = 40.0 / previewSprite->getSpriteBoundingBox().y;
+            } else {
+                spriteScale = 40.0 / previewSprite->getSpriteBoundingBox().x;
+            }
+            previewSprite->setScale(spriteScale, spriteScale, 1.0);
+            
+            dispatchEvent(new Event(), Event::CHANGE_EVENT);
+//            dispatchEvent(new PropEvent(this, NULL, PropDataString(lastData), PropDataString(currentData)), PropEvent::EVENT_PROP_CHANGE);
+        }
+        globalFrame->assetBrowser->removeAllHandlersForListener(this);
+        globalFrame->hideModal();
+        
+        
 	}
 
 	if(event->getDispatcher() == changeButton && event->getEventType() == "UIEvent" && event->getEventCode() == UIEvent::CLICK_EVENT) {
-		globalFrame->assetBrowser->addEventListener(this, UIEvent::OK_EVENT);
-		
-		std::vector<String> extensions;
-		extensions.push_back("sprite");
-		globalFrame->showAssetBrowser(extensions);
+        
+        globalFrame->assetBrowser->addEventListener(this, UIEvent::OK_EVENT);
+		std::vector<ResourcePool*> pools;
+        pools.push_back(CoreServices::getInstance()->getResourceManager()->getGlobalPool());
+        for(int i=0; i < entityInstance->getNumLinkedResourePools(); i++) {
+            pools.push_back(entityInstance->getLinkedResourcePoolAtIndex(i));
+        }
+		globalFrame->showAssetBrowserForPools(pools, Resource::RESOURCE_SPRITE);
+        
 	}
 }
 
-void ScreenSpriteProp::setPropData(PolycodeEditorPropActionData* data) {
-	set(data->stringVal);
-	dispatchEvent(new Event(), Event::CHANGE_EVENT);	
+void SceneSpriteProp::setPropData(PolycodeEditorPropActionData* data) {
+//    set(data->stringVal);
+//	dispatchEvent(new Event(), Event::CHANGE_EVENT);
 }
 
-void ScreenSpriteProp::set(String fileName) {
+void SceneSpriteProp::set(Sprite *sprite) {
 
-	if(fileName != previewSprite->getFileName()) {
-		if(previewSprite) {
-			propContents->removeChild(previewSprite);
-			delete previewSprite;
-		}
-		lastData = currentData;
-		currentData = fileName;
+    this->sprite = sprite;
+    
+    spriteName->setText(sprite->getName());
+
+    if(previewSprite) {
+        propContents->removeChild(previewSprite);
+        delete previewSprite;
+    }
+
+    lastData = currentData;
+    currentData = sprite;
 		
-		previewSprite = new ScreenSprite(fileName);
-		previewSprite->setPositionMode(ScreenEntity::POSITION_TOPLEFT);
-		previewSprite->setPosition(2, 1);
-		previewSprite->setShapeSize(48,48);		
-		propContents->addChild(previewSprite);	
-	}
+    previewSprite = new SceneSprite(sprite->getParentSpriteSet());
+    previewSprite->setSprite(sprite);
+    if(sprite->getNumStates() > 0) {
+        previewSprite->setSpriteState(sprite->getState(0), 0, false);
+    }
+    previewSprite->setAnchorPoint(0.0, 0.0, 0.0);
+    previewSprite->setPosition(22, 21);
+    previewSprite->setBlendingMode(Renderer::BLEND_MODE_NORMAL);
+    propContents->addChild(previewSprite);
+    
+    Number spriteScale = 1.0;
+    if(previewSprite->getHeight() > previewSprite->getWidth()) {
+        spriteScale = 40.0 / previewSprite->getSpriteBoundingBox().y;
+    } else {
+        spriteScale = 40.0 / previewSprite->getSpriteBoundingBox().x;
+    }
+    previewSprite->setScale(spriteScale, spriteScale, 1.0);
 }
 
-String ScreenSpriteProp::get() {
-	return previewSprite->getFileName();
+Sprite *SceneSpriteProp::get() {
+	return sprite;
 }
 
-ScreenEntityInstanceProp::ScreenEntityInstanceProp(String caption) : PropProp(caption, "ScreenEntityInstance"){
-	previewInstance = new ScreenEntityInstance("default/default.entity2d");
-	previewInstance->setPositionMode(ScreenEntity::POSITION_TOPLEFT);
+SceneEntityInstanceProp::SceneEntityInstanceProp(String caption) : PropProp(caption, "SceneEntityInstance"){
+//	previewInstance = new SceneEntityInstance("default/default.entity");
+	previewInstance->setAnchorPoint(-1.0, -1.0, 0.0);
 	previewInstance->setPosition(2, 1);
 	propContents->addChild(previewInstance);
 
@@ -1062,12 +1517,12 @@ ScreenEntityInstanceProp::ScreenEntityInstanceProp(String caption) : PropProp(ca
 	setHeight(50);
 }
 
-ScreenEntityInstanceProp::~ScreenEntityInstanceProp() {
+SceneEntityInstanceProp::~SceneEntityInstanceProp() {
 
 }
 
 
-void ScreenEntityInstanceProp::handleEvent(Event *event) {
+void SceneEntityInstanceProp::handleEvent(Event *event) {
 
 	if(event->getDispatcher() == globalFrame->assetBrowser && event->getEventType() == "UIEvent" && event->getEventCode() == UIEvent::OK_EVENT) {
 		String filePath = globalFrame->assetBrowser->getSelectedAssetPath();
@@ -1089,134 +1544,29 @@ void ScreenEntityInstanceProp::handleEvent(Event *event) {
 	}
 }
 
-void ScreenEntityInstanceProp::setPropData(PolycodeEditorPropActionData* data) {
+void SceneEntityInstanceProp::setPropData(PolycodeEditorPropActionData* data) {
 	set(data->stringVal);
 	dispatchEvent(new Event(), Event::CHANGE_EVENT);
 }
 
-void ScreenEntityInstanceProp::set(String fileName) {
+void SceneEntityInstanceProp::set(String fileName) {
 
 	if(fileName != previewInstance->getFileName()) {
 		propContents->removeChild(previewInstance);
 		delete previewInstance;
-		previewInstance = new ScreenEntityInstance(fileName);
-		previewInstance->setPositionMode(ScreenEntity::POSITION_TOPLEFT);
+//		previewInstance = new SceneEntityInstance(fileName);
+		previewInstance->setAnchorPoint(-1.0, -1.0, 0.0);
 		previewInstance->setPosition(2, 1);
 		
 		lastData = currentData;
-		currentData = fileName;
-		
-		Number radius = previewInstance->getCompoundBBoxRadius();
-		if(radius > 48) {
-			previewInstance->setScale(48.0/(radius*2.0), 48.0/(radius*2.0));		
-		}
+		currentData = fileName;		
 		
 		propContents->addChild(previewInstance);	
 	}
 }
 
-String ScreenEntityInstanceProp::get() {
+String SceneEntityInstanceProp::get() {
 	return previewInstance->getFileName();
-}
-
-ShapeSheet::ShapeSheet() : PropSheet("SCREEN SHAPE", "ScreenShape") {
-	shapeSize = new Vector2Prop("Shape size");
-	addProp(shapeSize);
-
-	typeProp = new ComboProp("Shape type");
-	addProp(typeProp);
-	
-	typeProp->comboEntry->addComboItem("Rectangle");
-	typeProp->comboEntry->addComboItem("Oval");
-
-	strokeProp = new BoolProp("Enable stroke");
-	addProp(strokeProp);
-
-	strokeColorProp = new ColorProp("Stroke color");
-	addProp(strokeColorProp);
-			
-	strokeSize = new NumberProp("Stroke width");
-	addProp(strokeSize);		
-			
-	propHeight = 190;	
-	
-	shape = NULL;
-	lastShapeType = -10;
-
-}
-
-ShapeSheet::~ShapeSheet() {
-
-}
-		
-void ShapeSheet::handleEvent(Event *event) {
-
-	if(!shape)
-		return;
-
-	if(event->getDispatcher() == strokeProp  && event->getEventCode() == Event::CHANGE_EVENT) {
-		lastStrokeVal = strokeProp->get();
-		shape->strokeEnabled = lastStrokeVal;
-		dispatchEvent(new Event(), Event::CHANGE_EVENT);
-	}
-
-	if(event->getDispatcher() == shapeSize  && event->getEventCode() == Event::CHANGE_EVENT) {
-		lastShapeSize = shapeSize->get();
-		shape->setShapeSize(lastShapeSize.x, lastShapeSize.y);
-		dispatchEvent(new Event(), Event::CHANGE_EVENT);	
-	}
-
-	if(event->getDispatcher() == typeProp  && event->getEventCode() == Event::CHANGE_EVENT) {
-		lastShapeType = typeProp->get();
-		shape->setShapeType(lastShapeType+1);
-		dispatchEvent(new Event(), Event::CHANGE_EVENT);
-	}
-	
-	if(event->getDispatcher() == strokeColorProp  && event->getEventCode() == Event::CHANGE_EVENT) {
-		lastStrokeColor = strokeColorProp->get();
-		shape->strokeColor = lastStrokeColor;
-		dispatchEvent(new Event(), Event::CHANGE_EVENT);
-	}
-
-	if(event->getDispatcher() == strokeSize  && event->getEventCode() == Event::CHANGE_EVENT) {
-		lastStrokeSize = strokeSize->get();
-		shape->strokeWidth = lastStrokeSize;
-		dispatchEvent(new Event(), Event::CHANGE_EVENT);	
-	}
-	
-	PropSheet::handleEvent(event);
-}
-
-void ShapeSheet::Update() {
-	if(shape) {
-	
-		enabled = true;
-			
-		if(lastShapeSize.x != shape->getWidth() && lastShapeSize.y != shape->getHeight()) {
-			lastShapeSize = Vector2(shape->getWidth(), shape->getHeight());
-			shapeSize->set(lastShapeSize);
-		}
-		
-		if(lastShapeType != shape->getShapeType()-1) {
-			typeProp->set(shape->getShapeType()-1);			
-			lastShapeType = shape->getShapeType()-1;			
-		}
-		
-		if(lastStrokeVal != shape->strokeEnabled) {
-			strokeProp->set(shape->strokeEnabled);
-			lastStrokeVal = shape->strokeEnabled;
-		}
-		
-		if(lastStrokeColor != shape->strokeColor) {
-			strokeColorProp->set(shape->strokeColor);
-		}
-		
-		if(lastStrokeSize != shape->strokeWidth) {
-			strokeSize->set(shape->strokeWidth);
-		}
-	} else {
-		enabled = false;
-	}
 }
 
 ShaderPassProp::ShaderPassProp(Material *material, int shaderIndex) : PropProp("", "ShaderPassProp") {
@@ -1224,7 +1574,7 @@ ShaderPassProp::ShaderPassProp(Material *material, int shaderIndex) : PropProp("
 	this->shader = material->getShader(shaderIndex);
 	this->shaderIndex = shaderIndex;
 	
-	removeButton = new UIImageButton("Images/remove_icon.png");
+	removeButton = new UIImageButton("main/remove_icon.png", 1.0, 12, 12);
 	removeButton->addEventListener(this, UIEvent::CLICK_EVENT);	
 	propContents->addChild(removeButton);
 	removeButton->setPosition(-110, 6);
@@ -1249,7 +1599,7 @@ ShaderPassProp::ShaderPassProp(Material *material, int shaderIndex) : PropProp("
 	editButton = new UIButton("Options", 30);
 	editButton->addEventListener(this, UIEvent::CLICK_EVENT);
 	propContents->addChild(editButton);
-	setHeight(30);
+	setHeight(25);
 }
 
 ShaderPassProp::~ShaderPassProp() {
@@ -1289,7 +1639,7 @@ TargetBindingProp::TargetBindingProp(Shader *shader, Material *material, ShaderB
 	this->shader = shader;
 	this->binding = binding;
 		
-	removeButton = new UIImageButton("Images/remove_icon.png");
+	removeButton = new UIImageButton("main/remove_icon.png", 1.0, 12, 12);
 	removeButton->addEventListener(this, UIEvent::CLICK_EVENT);	
 	propContents->addChild(removeButton);
 	removeButton->setPosition(-110, 6);
@@ -1325,7 +1675,7 @@ TargetBindingProp::TargetBindingProp(Shader *shader, Material *material, ShaderB
 	textureComboBox->addEventListener(this, UIEvent::CHANGE_EVENT);
 	propContents->addChild(textureComboBox);
 	
-	setHeight(30);
+	setHeight(25);
 	
 	if(typeComboBox->getSelectedIndex() == 1) {
 		textureComboBox->enabled = false;
@@ -1422,7 +1772,7 @@ RenderTargetProp::RenderTargetProp(ShaderRenderTarget *renderTarget, Material *m
 	this->material = material;
 	this->renderTarget = renderTarget;
 
-	removeButton = new UIImageButton("Images/remove_icon.png");
+	removeButton = new UIImageButton("main/remove_icon.png", 1.0, 12, 12);
 	removeButton->addEventListener(this, UIEvent::CLICK_EVENT);	
 	propContents->addChild(removeButton);
 	removeButton->setPosition(-110, 6);
@@ -1454,7 +1804,7 @@ RenderTargetProp::RenderTargetProp(ShaderRenderTarget *renderTarget, Material *m
 	typeComboBox->addEventListener(this, UIEvent::CHANGE_EVENT);
 	propContents->addChild(typeComboBox);
 	
-	setHeight(30);
+	setHeight(25);
 }
 
 void RenderTargetProp::setPropWidth(Number width) {
@@ -1516,12 +1866,12 @@ void RenderTargetProp::handleEvent(Event *event) {
 	PropProp::handleEvent(event);
 }
 
-ShaderPassesSheet::ShaderPassesSheet() : PropSheet("SHADER PASSES", "shaderPasses") {
+ShaderPassesSheet::ShaderPassesSheet(ResourcePool *resourcePool) : PropSheet("SHADER PASSES", "shaderPasses") {
+    this->resourcePool = resourcePool;
 	propHeight = 70;
-	addButton = new UIButton("Add Shader Pass", 150);
-	addButton->addEventListener(this, UIEvent::CLICK_EVENT);
-	contents->addChild(addButton);
-	addButton->setPosition(15, 35);
+	addButton = new ButtonProp("Add Shader Pass");
+	addButton->getButton()->addEventListener(this, UIEvent::CLICK_EVENT);
+    addProp(addButton);
 	
 	customUndoHandler = true;
 	material = NULL;
@@ -1543,13 +1893,15 @@ void ShaderPassesSheet::setMaterial(Material *material) {
 void ShaderPassesSheet::refreshPasses() {
 
 	for(int i=0; i < props.size(); i++) {
-		contents->removeChild(props[i]);
-		props[i]->removeAllHandlersForListener(this);
-		delete props[i];
+        if(props[i] != addButton) {
+            contents->removeChild(props[i]);
+            props[i]->removeAllHandlersForListener(this);
+            delete props[i];
+        }
 	}
 	props.clear();
-	propHeight = 0;
-
+    props.push_back(addButton);
+    
 	if(!material) {
 		return;
 	}
@@ -1560,14 +1912,10 @@ void ShaderPassesSheet::refreshPasses() {
 		passProp->addEventListener(this, Event::CHANGE_EVENT);		
 		passProp->addEventListener(this, Event::SELECT_EVENT);
 		addProp(passProp);
-		propHeight += 30;	
 	}
-	
-	addButton->setPosition(15, propHeight);	
-	propHeight += 70;	
 
 	dispatchEvent(new Event(), Event::COMPLETE_EVENT);		
-	Resize(width, height);	
+	Resize(getWidth(), getHeight());	
 	
 }
 
@@ -1581,9 +1929,9 @@ void ShaderPassesSheet::Update() {
 
 void ShaderPassesSheet::handleEvent(Event *event) {
 
-	if(event->getDispatcher() == addButton) {
+	if(event->getDispatcher() == addButton->getButton()) {
 	
-		Shader *defaultShader = (Shader*)CoreServices::getInstance()->getResourceManager()->getResource(Resource::RESOURCE_SHADER, "PassThrough");
+		Shader *defaultShader = (Shader*)resourcePool->getResource(Resource::RESOURCE_SHADER, "PassThrough");
 		if(defaultShader) {	
 			ShaderBinding *newShaderBinding = defaultShader->createBinding();		
 			material->addShader(defaultShader, newShaderBinding);
@@ -1601,8 +1949,8 @@ void ShaderPassesSheet::handleEvent(Event *event) {
 					selectedProp = (ShaderPassProp*)props[i];
 					dispatchEvent(new Event(), Event::SELECT_EVENT);				
 				} else if(event->getEventCode() == Event::REMOVE_EVENT) {
-					removeIndex = i;
-					dispatchEvent(new Event(), Event::REMOVE_EVENT);					
+					removeIndex = i-1;
+					dispatchEvent(new Event(), Event::REMOVE_EVENT);
 				}
 			}
 		}
@@ -1612,12 +1960,10 @@ void ShaderPassesSheet::handleEvent(Event *event) {
 }
 
 TargetBindingsSheet::TargetBindingsSheet() : PropSheet("TEXTURE BINDINGS", "targetBindings") {
-	propHeight = 70;
-	addButton = new UIButton("Add Render Target", 150);
-	addButton->addEventListener(this, UIEvent::CLICK_EVENT);
-	contents->addChild(addButton);
-	addButton->setPosition(15, 35);	
-	customUndoHandler = true;	
+	addButton = new ButtonProp("Add Render Target");
+	addButton->getButton()->addEventListener(this, UIEvent::CLICK_EVENT);
+    addProp(addButton);
+	customUndoHandler = true;
 	material = NULL;
 	binding = NULL;	
 	bindingToRemove = NULL;
@@ -1645,12 +1991,14 @@ void TargetBindingsSheet::Update() {
 
 void TargetBindingsSheet::refreshTargets() {
 	for(int i=0; i < props.size(); i++) {
-		contents->removeChild(props[i]);
-		props[i]->removeAllHandlersForListener(this);
-		delete props[i];
+        if(props[i] != addButton) {
+            contents->removeChild(props[i]);
+            props[i]->removeAllHandlersForListener(this);
+            delete props[i];
+        }
 	}
 	props.clear();
-	propHeight = 0;
+    props.push_back(addButton);
 
 	if(!material) {
 		return;
@@ -1661,20 +2009,15 @@ void TargetBindingsSheet::refreshTargets() {
 		TargetBindingProp *bindingProp = new TargetBindingProp(shader, material, binding, targetBinding);
 		bindingProp->addEventListener(this, Event::REMOVE_EVENT);	
 		addProp(bindingProp);
-		propHeight += 30;		
-		
 	}
-				
-	addButton->setPosition(15, propHeight);	
-	propHeight += 70;	
 
 	dispatchEvent(new Event(), Event::COMPLETE_EVENT);		
-	Resize(width, height);	
+	Resize(getWidth(), getHeight());	
 }
 
 void TargetBindingsSheet::handleEvent(Event *event) {
 
-	if(event->getDispatcher() == addButton) {
+	if(event->getDispatcher() == addButton->getButton()) {
 		RenderTargetBinding* newBinding = new RenderTargetBinding();
 		newBinding->mode = RenderTargetBinding::MODE_COLOR;
 		newBinding->texture = NULL;		
@@ -1703,12 +2046,11 @@ void TargetBindingsSheet::handleEvent(Event *event) {
 
 RenderTargetsSheet::RenderTargetsSheet() : PropSheet("RENDER TARGETS", "renderTargets") {
 	propHeight = 70;
-	addButton = new UIButton("Add Render Target", 150);
-	addButton->addEventListener(this, UIEvent::CLICK_EVENT);
-	contents->addChild(addButton);
-	addButton->setPosition(15, 35);
-	
-	customUndoHandler = true;	
+	addButton = new ButtonProp("Add Render Target");
+	addButton->getButton()->addEventListener(this, UIEvent::CLICK_EVENT);
+    addProp(addButton);
+    
+	customUndoHandler = true;
 	material = NULL;
 	binding = NULL;
 	
@@ -1721,12 +2063,14 @@ RenderTargetsSheet::~RenderTargetsSheet() {
 
 void RenderTargetsSheet::refreshTargets() {
 	for(int i=0; i < props.size(); i++) {
-		contents->removeChild(props[i]);
-		props[i]->removeAllHandlersForListener(this);
-		delete props[i];
+        if(props[i] != addButton) {
+            contents->removeChild(props[i]);
+            props[i]->removeAllHandlersForListener(this);
+            delete props[i];
+        }
 	}
 	props.clear();
-	propHeight = 0;
+    props.push_back(addButton);
 
 	if(!material) {
 		return;
@@ -1737,14 +2081,10 @@ void RenderTargetsSheet::refreshTargets() {
 		RenderTargetProp *targetProp = new RenderTargetProp(renderTarget, material);		
 		targetProp->addEventListener(this, Event::CANCEL_EVENT);	
 		addProp(targetProp);
-		propHeight += 30;		
 	}
-	
-	addButton->setPosition(15, propHeight);	
-	propHeight += 70;	
 
 	dispatchEvent(new Event(), Event::COMPLETE_EVENT);		
-	Resize(width, height);	
+	Resize(getWidth(), getHeight());	
 }
 
 void RenderTargetsSheet::Update() {
@@ -1765,7 +2105,7 @@ void RenderTargetsSheet::handleEvent(Event *event) {
 	if(!material)
 		return;
 
-	if(event->getDispatcher() == addButton) {
+	if(event->getDispatcher() == addButton->getButton()) {
 		ShaderRenderTarget* newRenderTarget = new ShaderRenderTarget();
 		newRenderTarget->id = "render_target";
 		newRenderTarget->width = 1.0;
@@ -1781,7 +2121,7 @@ void RenderTargetsSheet::handleEvent(Event *event) {
 		if(event->getDispatcher() == props[i] && event->getEventType() == "") {
 			switch(event->getEventCode()) {						
 				case Event::CANCEL_EVENT:
-					removeIndex = i;
+					removeIndex = i-1;
 				break;
 				case Event::CHANGE_EVENT:
 				break;				
@@ -1795,22 +2135,18 @@ void RenderTargetsSheet::handleEvent(Event *event) {
 
 
 EntityPropSheet::EntityPropSheet() : PropSheet("CUSTOM PROPERTIES", "entityProps"){
+	
+    addButtonProp = new ButtonProp("Add Property");
+    addProp(addButtonProp);
+    addButtonProp->getButton()->addEventListener(this, UIEvent::CLICK_EVENT);
 
-	propHeight = 75;
-	
-	addButton = new UIButton("Add Property", 150);
-	addButton->addEventListener(this, UIEvent::CLICK_EVENT);
-	contents->addChild(addButton);
-	addButton->setPosition(15, 35);
-	
 	customUndoHandler = true;
 	
 	entity = NULL;
-	lastEntity = NULL;
 	
 	lastNumProps = 0;
-	
 	removeIndex = -1;
+    enabled = false;
 }
 
 void EntityPropSheet::applyPropActionData(PolycodeEditorPropActionData *data) {
@@ -1830,7 +2166,7 @@ void EntityPropSheet::handleEvent(Event *event) {
 	if(!entity)
 		return;
 		
-	if(event->getDispatcher() == addButton && event->getEventType() == "UIEvent") {
+	if(event->getDispatcher() == addButtonProp->getButton() && event->getEventType() == "UIEvent") {
 		PolycodeEditorPropActionData *beforeData = PropDataEntity(entity);	
 		entity->entityProps.push_back(EntityProp());
 		refreshProps();
@@ -1844,13 +2180,13 @@ void EntityPropSheet::handleEvent(Event *event) {
 		if(event->getDispatcher() == props[i] && event->getEventType() == "") {
 			switch(event->getEventCode()) {						
 				case Event::CANCEL_EVENT:
-					removeIndex = i;
+					removeIndex = i-1;
 				break;
 				case Event::CHANGE_EVENT:
 					PolycodeEditorPropActionData *beforeData = PropDataEntity(entity);
-					if(i < entity->entityProps.size()) {
-						entity->entityProps[i].propName = ((CustomProp*)props[i])->getKey();
-						entity->entityProps[i].propValue = ((CustomProp*)props[i])->getValue();			
+					if(i-1 < entity->entityProps.size()) {
+						entity->entityProps[i-1].propName = ((CustomProp*)props[i])->getKey();
+						entity->entityProps[i-1].propValue = ((CustomProp*)props[i])->getValue();
 					}
 					PolycodeEditorPropActionData *afterData = PropDataEntity(entity);			
 					PropEvent *propEvent = new PropEvent(NULL, this, beforeData, afterData);
@@ -1865,12 +2201,15 @@ void EntityPropSheet::handleEvent(Event *event) {
 void EntityPropSheet::refreshProps() {
 
 	for(int i=0; i < props.size(); i++) {
-		contents->removeChild(props[i]);
-		props[i]->removeAllHandlersForListener(this);
-		delete props[i];
+        if(props[i] != addButtonProp) {
+            contents->removeChild(props[i]);
+            props[i]->removeAllHandlersForListener(this);
+            delete props[i];
+        }
 	}
 	props.clear();
-	propHeight = 0;
+    props.push_back(addButtonProp);
+    
 	
 	for(int i=0; i < entity->entityProps.size(); i++) {			
 		EntityProp prop = entity->entityProps[i];
@@ -1878,12 +2217,8 @@ void EntityPropSheet::refreshProps() {
 		newProp->addEventListener(this, Event::CANCEL_EVENT);
 		newProp->addEventListener(this, Event::CHANGE_EVENT);		
 		addProp(newProp);
-		propHeight += 30;
 	}
 	
-	
-	addButton->setPosition(15, propHeight);	
-	propHeight += 70;	
 	
 	if(lastNumProps != entity->entityProps.size()) {
 		dispatchEvent(new Event(), Event::COMPLETE_EVENT);
@@ -1891,14 +2226,22 @@ void EntityPropSheet::refreshProps() {
 	
 	lastNumProps = entity->entityProps.size();
 		
-	Resize(width, height);	
+	Resize(getWidth(), getHeight());	
+}
+
+void EntityPropSheet::setEntity(Entity *entity){
+    this->entity = entity;
+	if(entity) {
+		enabled = true;
+        refreshProps();
+	} else {
+		enabled = false;		
+	}
 }
 
 void EntityPropSheet::Update() {
 	if(entity) {
-	
 		if(removeIndex != -1) {
-		
 			PolycodeEditorPropActionData *beforeData = PropDataEntity(entity);
 				
 			if(removeIndex < entity->entityProps.size()) {
@@ -1910,20 +2253,14 @@ void EntityPropSheet::Update() {
 			PropEvent *propEvent = new PropEvent(NULL, this, beforeData, afterData);
 			dispatchEvent(propEvent, PropEvent::EVENT_PROP_CHANGE);
 		}
-	
-		enabled = true;		
-		if(entity != lastEntity) {
-			refreshProps();
-			lastEntity = entity;
-		}
-	} else {
-		enabled = false;		
 	}
 }
 
 ShaderOptionsSheet::ShaderOptionsSheet() : PropSheet("SHADER OPTIONS", "shader_options"){
 	shader = NULL;
 	propHeight = 40;
+    customUndoHandler = true;
+    enabled = false;
 }
 
 ShaderOptionsSheet::~ShaderOptionsSheet() {
@@ -1935,13 +2272,21 @@ void ShaderOptionsSheet::handleEvent(Event *event) {
 	if(event->getEventCode() == Event::CHANGE_EVENT) {
 		for(int i=0 ; i < props.size(); i++) {
 			if(event->getDispatcher() == props[i]) {
+                
+                LocalShaderParam *param = binding->getLocalParamByName(props[i]->label->getText());
+                
 				if(props[i]->propType == "Number") {
-					(*(Number*)binding->getLocalParamByName(props[i]->label->getText())->data) = ((NumberProp*)props[i])->get();
+                    if(!param){
+                        param = binding->addParam(ProgramParam::PARAM_NUMBER, props[i]->label->getText());
+                    }
+					(*(Number*)param->data) = ((NumberProp*)props[i])->get();
 				} else if(props[i]->propType == "Color") {
-					(*(Color*)binding->getLocalParamByName(props[i]->label->getText())->data) = ((ColorProp*)props[i])->get();
-				
-				} else if(props[i]->propType == "Vector2") {
-					(*(Vector2*)binding->getLocalParamByName(props[i]->label->getText())->data) = ((Vector2Prop*)props[i])->get();
+                    
+                    if(!param){
+                        param = binding->addParam(ProgramParam::PARAM_COLOR, props[i]->label->getText());
+                    }
+                    
+					(*(Color*)param->data) = ((ColorProp*)props[i])->get();
 				
 				}
 				dispatchEvent(new Event(), Event::CHANGE_EVENT);				
@@ -1979,7 +2324,11 @@ void ShaderOptionsSheet::setOptionsFromParams(std::vector<ProgramParam> &params)
 						NumberProp *numberProp = new NumberProp(paramName);
 						addProp(numberProp);
 												
-						Number numberValue = (*(Number*)binding->getLocalParamByName(params[i].name)->data);
+                        LocalShaderParam *param = binding->getLocalParamByName(params[i].name);
+                        Number numberValue = 0.0;
+                        if(param) {
+                            numberValue = (*(Number*)param->data);
+                        }
 						numberProp->set(numberValue);
 						propHeight += 30;
 					}
@@ -1987,25 +2336,19 @@ void ShaderOptionsSheet::setOptionsFromParams(std::vector<ProgramParam> &params)
 					case ProgramParam::PARAM_COLOR:
 					{
 						String paramName = params[i].name;
-						
+
+                        LocalShaderParam *param = binding->getLocalParamByName(params[i].name);
+
 						ColorProp *colorProp = new ColorProp(paramName);
 						addProp(colorProp);
 						
-						Color colorValue = (*(Color*)binding->getLocalParamByName(params[i].name)->data);
+						Color colorValue;
+                        if(param) {
+                            colorValue = (*(Color*)param->data);
+                        }
 						colorProp->set(colorValue);
 						
-						propHeight += 40;												
-					}
-					break;
-					case ProgramParam::PARAM_VECTOR2:
-					{
-						String paramName = params[i].name;						
-						Vector2Prop *vec2Prop = new Vector2Prop(paramName);;
-						addProp(vec2Prop);
-						
-						Vector2 vec2val = (*(Vector2*)binding->getLocalParamByName(params[i].name)->data);
-						vec2Prop->set(vec2val);
-						propHeight += 30;
+						propHeight += 40;				
 					}
 					break;
 				}	
@@ -2018,6 +2361,8 @@ void ShaderOptionsSheet::setShader(Shader *shader, Material *material, ShaderBin
 	this->shader = shader;
 	this->material = material;
 	
+    enabled = true;
+    
 	if(!shader || !material)
 		return;
 		
@@ -2026,12 +2371,14 @@ void ShaderOptionsSheet::setShader(Shader *shader, Material *material, ShaderBin
 	setOptionsFromParams(shader->expectedParams);
 	
 	dispatchEvent(new Event(), Event::COMPLETE_EVENT);	
-	Resize(width, height);
+	Resize(getWidth(), getHeight());
 }
 
 ShaderTexturesSheet::ShaderTexturesSheet() : PropSheet("SHADER TEXTURES", "shader_textures"){
 	shader = NULL;
 	propHeight = 40;
+    customUndoHandler = true;
+    enabled = false;
 }
 
 ShaderTexturesSheet::~ShaderTexturesSheet() {
@@ -2085,6 +2432,8 @@ void ShaderTexturesSheet::setShader(Shader *shader, Material *material, ShaderBi
 	this->shader = shader;
 	this->material = material;
 	
+    enabled = true;
+    
 	if(!shader || !material)
 		return;
 		
@@ -2098,8 +2447,8 @@ void ShaderTexturesSheet::setShader(Shader *shader, Material *material, ShaderBi
 		for(int j=0; j < cubemaps.size(); j++) {
 			comboProp->comboEntry->addComboItem(cubemaps[j]->getResourceName(), (void*) cubemaps[j]);
 			if(material) {
-				if(material->getShaderBinding(0)) {
-					Cubemap *currentCubemap = material->getShaderBinding(0)->getCubemap(shader->expectedCubemaps[i]);
+				if(binding) {
+					Cubemap *currentCubemap = binding->getCubemap(shader->expectedCubemaps[i]);
 					if(currentCubemap) {
 						if(currentCubemap->getResourceName() == cubemaps[j]->getResourceName()) {
 							comboProp->set(j);
@@ -2118,8 +2467,8 @@ void ShaderTexturesSheet::setShader(Shader *shader, Material *material, ShaderBi
 		TextureProp *textureProp = new TextureProp(shader->expectedTextures[i]);
 		
 		if(material) {
-			if(material->getShaderBinding(0)) {
-				Texture *currentTexture = material->getShaderBinding(0)->getTexture(shader->expectedTextures[i]);
+			if(binding) {
+				Texture *currentTexture = binding->getTexture(shader->expectedTextures[i]);
 				if(currentTexture) {
 					textureProp->set(currentTexture);
 				}
@@ -2132,54 +2481,725 @@ void ShaderTexturesSheet::setShader(Shader *shader, Material *material, ShaderBi
 	}
 
 	dispatchEvent(new Event(), Event::COMPLETE_EVENT);	
-	Resize(width, height);
+	Resize(getWidth(), getHeight());
 }
 
-ScreenEntitySheet::ScreenEntitySheet() : PropSheet("SCREEN ENTITY", "screen_entity") {
-
-	widthProp = new NumberProp("Width");
-	addProp(widthProp);
-	
-	heightProp = new NumberProp("Height");
-	addProp(heightProp);
-	
-	propHeight = 100;
-	entity = NULL;
-	lastEntity = NULL;
+TransformSheet::TransformSheet() : PropSheet("TRANSFORM", "entity_transform") {
+    entity = NULL;
+    
+    positionProp = new Vector3Prop("Position");
+    addProp(positionProp);
+    
+    scaleProp = new Vector3Prop("Scale");
+    addProp(scaleProp);
+    
+    rotationProp = new Vector3Prop("Rotation");
+    addProp(rotationProp);
+    
+    propHeight = 235;
+    
+    enabled = false;
 }
 
-ScreenEntitySheet::~ScreenEntitySheet() {
+TransformSheet::~TransformSheet() {
 
 }
-		
-void ScreenEntitySheet::handleEvent(Event *event) {
-	if(entity) {
-		if(event->getDispatcher() == widthProp) {
-			entity->setWidth(widthProp->get());
-			dispatchEvent(new Event(), Event::CHANGE_EVENT);		
-		} else 	if(event->getDispatcher() == heightProp) {
-			entity->setHeight(heightProp->get());
-			dispatchEvent(new Event(), Event::CHANGE_EVENT);		
-		}
 
-	}
-	PropSheet::handleEvent(event);	
+
+void TransformSheet::setEntity(Entity *entity) {
+    this->entity = entity;
+    if(entity) {
+        enabled = true;
+    } else {
+        enabled = false;
+    }
 }
 
-void ScreenEntitySheet::Update() {
-	if(entity) {
-		enabled = true;
-		if(entity != lastEntity) {
-			widthProp->set(entity->getWidth());
-			heightProp->set(entity->getHeight());
-			lastEntity = entity;
-		}
-	} else {
-		enabled = false;
-	}
+void TransformSheet::Update() {
+    if(!entity) {
+        return;
+    }
+    
+    if(entity->getPosition() != lastPosition) {
+        positionProp->set(entity->getPosition());
+        lastPosition = entity->getPosition();
+    }
+    
+    if(entity->getScale() != lastScale) {
+        scaleProp->set(entity->getScale());
+        lastScale = entity->getScale();
+    }
+    
+    if(entity->getRotationEuler() != lastRotation) {
+        rotationProp->set(entity->getRotationEuler());
+        lastRotation = entity->getRotationEuler();
+    }
+}
+
+void TransformSheet::handleEvent(Event *event) {
+    if(event->getEventCode() == Event::CHANGE_EVENT) {
+        if(event->getDispatcher() == positionProp) {
+            lastPosition = positionProp->get();
+            entity->setPosition(lastPosition);
+        } else if(event->getDispatcher() == scaleProp) {
+            lastScale = scaleProp->get();
+            entity->setScale(lastScale);
+        } else if(event->getDispatcher() == rotationProp) {
+            lastRotation = rotationProp->get();
+            entity->setRotationEuler(lastRotation);
+        }
+    }
+    PropSheet::handleEvent(event);
+}
+
+ParticleEmitterSheet::ParticleEmitterSheet() : PropSheet("PARTICLE EMITTER", "particle_emitter") {
+    emitter = NULL;
+
+    typeProp = new ComboProp("Type");
+    typeProp->comboEntry->addComboItem("Point");
+    typeProp->comboEntry->addComboItem("Quad");
+    addProp(typeProp);
+
+    countProp = new NumberProp("Count");
+    addProp(countProp);
+    
+    lifetimeProp = new NumberProp("Lifetime");
+    addProp(lifetimeProp);
+
+    particleSizeProp = new NumberProp("Size");
+    addProp(particleSizeProp);
+    
+    particleSpeedProp = new NumberProp("Speed");
+    addProp(particleSpeedProp);
+    
+    worldParticlesProp = new BoolProp("World space");
+    addProp(worldParticlesProp);
+    
+    loopingProp = new BoolProp("Loop");
+    addProp(loopingProp);
+    
+    particleRotaionProp = new Vector3Prop("Rotation");
+    addProp(particleRotaionProp);
+    
+    gravityProp = new Vector3Prop("Gravity");
+    addProp(gravityProp);
+    
+    directionProp = new Vector3Prop("Direction");
+    addProp(directionProp);
+
+    deviationProp = new Vector3Prop("Deviation");
+    addProp(deviationProp);
+
+    sizeProp = new Vector3Prop("Emitter size");
+    addProp(sizeProp);
+
+    perlinProp = new BoolProp("Movement noise");
+    addProp(perlinProp);
+    
+    perlinSizeProp = new Vector3Prop("Noise amount");
+    addProp(perlinSizeProp);
+
+    useColorCurvesProp = new BoolProp("Use color curves");
+    addProp(useColorCurvesProp);
+    
+    colorCurveProp = new BezierRGBACurveProp("Color curves");
+    addProp(colorCurveProp);
+
+    useScaleCurvesProp = new BoolProp("Use scale curve");
+    addProp(useScaleCurvesProp);
+    
+    scaleCurveProp = new BezierCurveProp("Scale curve", "Scale");
+    addProp(scaleCurveProp);
+    
+    propHeight = 700;
+    enabled = false;
+    
+}
+
+ParticleEmitterSheet::~ParticleEmitterSheet() {
+    
+}
+
+void ParticleEmitterSheet::handleEvent(Event *event) {
+    if(!emitter) {
+        return;
+    }
+    if(event->getEventCode() == Event::CHANGE_EVENT) {
+        if(event->getDispatcher() == typeProp) {
+            emitter->setParticleType(typeProp->get());
+        } else if(event->getDispatcher() == countProp) {
+                emitter->setParticleCount(countProp->get());
+        } else if(event->getDispatcher() == particleSpeedProp) {
+            emitter->setParticleSpeed(particleSpeedProp->get());
+        } else if(event->getDispatcher() == lifetimeProp) {
+            emitter->setParticleLifetime(lifetimeProp->get());
+        } else if(event->getDispatcher() == particleSizeProp) {
+            emitter->setParticleSize(particleSizeProp->get());
+        } else if(event->getDispatcher() == worldParticlesProp) {
+            emitter->setParticlesInWorldSpace(worldParticlesProp->get());
+        } else if(event->getDispatcher() == loopingProp) {
+            emitter->setLoopParticles(loopingProp->get());
+        } else if(event->getDispatcher() == particleRotaionProp) {
+            emitter->setParticleRotationSpeed(particleRotaionProp->get());
+        } else if(event->getDispatcher() == gravityProp) {
+            emitter->setGravity(gravityProp->get());
+        } else if(event->getDispatcher() == directionProp) {
+            emitter->setParticleDirection(directionProp->get());
+        } else if(event->getDispatcher() == sizeProp) {
+            emitter->setEmitterSize(sizeProp->get());
+        } else if(event->getDispatcher() == deviationProp) {
+            emitter->setDirectionDeviation(deviationProp->get());
+        } else if(event->getDispatcher() == perlinProp) {
+            emitter->setPerlinEnabled(perlinProp->get());
+        } else if(event->getDispatcher() == perlinSizeProp) {
+            emitter->setPerlinValue(perlinSizeProp->get());
+        } else if(event->getDispatcher() == useColorCurvesProp) {
+            emitter->useColorCurves = useColorCurvesProp->get();
+        } else if(event->getDispatcher() == useScaleCurvesProp) {
+            emitter->useScaleCurve = useScaleCurvesProp->get();
+        }
+
+    }
+    
+    PropSheet::handleEvent(event);
+}
+
+void ParticleEmitterSheet::setParticleEmitter(SceneParticleEmitter *emitter) {
+    this->emitter = emitter;
+    if(emitter) {
+        enabled = true;
+        typeProp->set(emitter->getParticleType());
+        countProp->set(emitter->getParticleCount());
+        lifetimeProp->set(emitter->getParticleLifetime());
+        particleSizeProp->set(emitter->getParticleSize());
+        worldParticlesProp->set(emitter->getParticlesInWorldSpace());
+        loopingProp->set(emitter->getLoopParticles());
+        particleRotaionProp->set(emitter->getParticleRotationSpeed());
+        particleSpeedProp->set(emitter->getParticleSpeed());
+        gravityProp->set(emitter->getGravity());
+        directionProp->set(emitter->getParticleDirection());
+        sizeProp->set(emitter->getEmitterSize());
+        deviationProp->set(emitter->getDirectionDeviation());
+        perlinProp->set(emitter->getPerlinEnabled());
+        perlinSizeProp->set(emitter->getPerlinValue());
+        useColorCurvesProp->set(emitter->useColorCurves);
+        useScaleCurvesProp->set(emitter->useScaleCurve);
+        
+        colorCurveProp->curveR = &emitter->colorCurveR;
+        colorCurveProp->curveG = &emitter->colorCurveG;
+        colorCurveProp->curveB = &emitter->colorCurveB;
+        colorCurveProp->curveA = &emitter->colorCurveA;
+        
+        scaleCurveProp->curve = &emitter->scaleCurve;
+        
+    } else {
+        enabled = false;
+    }
+}
+
+SceneLightSheet::SceneLightSheet() : PropSheet("LIGHT", "scene_light") {
+    typeProp = new ComboProp("Type");
+    typeProp->comboEntry->addComboItem("Point");
+    typeProp->comboEntry->addComboItem("Spot");
+    addProp(typeProp);
+    
+    importanceProp = new NumberProp("Importance");
+    addProp(importanceProp);
+    
+    lightColorProp = new ColorProp("Light color");
+    addProp(lightColorProp);
+    
+    specularColorProp = new ColorProp("Specular color");
+    addProp(specularColorProp);
+    
+    intensityProp = new NumberProp("Intensity");
+    addProp(intensityProp);
+    
+    constantAttenuationProp = new SliderProp("Constant att.", 0.0, 1.0);
+    addProp(constantAttenuationProp);
+    
+    linearAttenuationProp = new SliderProp("Linear att.", 0.0, 1.0);
+    addProp(linearAttenuationProp);
+    
+    quadraticAttenuationProp = new SliderProp("Quadratic att.", 0.0, 1.0);
+    addProp(quadraticAttenuationProp);
+    
+    spotlightCutoffProp = new SliderProp("Spot angle", 0.0, 90.0);
+    addProp(spotlightCutoffProp);
+    
+    spotlightExponentProp = new SliderProp("Spot softness", 0.0, 1.0);
+    addProp(spotlightExponentProp);
+    
+    castShadowsProp = new BoolProp("Cast shadows");
+    addProp(castShadowsProp);
+    
+    shadowMapFOVProp = new SliderProp("Shadow FOV", 1.0, 180.0);
+    addProp(shadowMapFOVProp);
+    
+    shadowResolutionProp = new NumberProp("Shadowmap res.");
+    addProp(shadowResolutionProp);
+
+    propHeight = 365;
+    light = NULL;
+    enabled = false;
+}
+
+SceneLightSheet::~SceneLightSheet() {
+    
+}
+
+void SceneLightSheet::updateOptionVisibility() {
+    if(!light) {
+        return;
+    }
+    
+    if(light->getLightType() == SceneLight::POINT_LIGHT) {
+        spotlightCutoffProp->enabled = false;
+        spotlightExponentProp->enabled = false;
+        castShadowsProp->enabled = false;
+        shadowMapFOVProp->enabled = false;
+        shadowResolutionProp->enabled = false;
+    } else {
+        spotlightCutoffProp->enabled = true;
+        spotlightExponentProp->enabled = true;
+        castShadowsProp->enabled = true;
+        if(light->areShadowsEnabled()) {
+            shadowMapFOVProp->enabled = true;
+            shadowResolutionProp->enabled = true;
+        } else {
+            shadowMapFOVProp->enabled = false;
+            shadowResolutionProp->enabled = false;
+        }
+    }
+    
+    layoutProps();
+}
+
+void SceneLightSheet::setSceneLight(SceneLight *light) {
+    this->light = light;
+    
+    if(light) {
+        typeProp->set(light->getLightType());
+        lightColorProp->set(light->lightColor);
+        specularColorProp->set(light->specularLightColor);
+        intensityProp->set(light->getIntensity());
+        constantAttenuationProp->set(light->getConstantAttenuation());
+        linearAttenuationProp->set(light->getLinearAttenuation());
+        quadraticAttenuationProp->set(light->getQuadraticAttenuation());
+        
+        importanceProp->set(light->getLightImportance());
+        
+        spotlightCutoffProp->set(light->getSpotlightCutoff());
+        spotlightExponentProp->set(light->getSpotlightExponent());
+        
+        castShadowsProp->set(light->areShadowsEnabled());
+        shadowMapFOVProp->set(light->getShadowMapFOV());
+        shadowResolutionProp->set(light->getShadowMapResolution());
+        
+        updateOptionVisibility();
+        
+        enabled = true;
+    } else {
+        enabled = false;
+    }
+}
+
+void SceneLightSheet::handleEvent(Event *event) {
+    if(!light) {
+        return;
+    }
+    
+    if(event->getEventCode() == Event::CHANGE_EVENT) {
+        if(event->getDispatcher() == typeProp) {
+            light->setLightType(typeProp->get());
+        } else if(event->getDispatcher() == lightColorProp) {
+            light->lightColor = lightColorProp->get();
+        } else if(event->getDispatcher() == specularColorProp) {
+            light->specularLightColor = specularColorProp->get();
+        } else if(event->getDispatcher() == intensityProp) {
+            light->setIntensity(intensityProp->get());
+        } else if(event->getDispatcher() == constantAttenuationProp) {
+            light->setAttenuation(constantAttenuationProp->get(), light->getLinearAttenuation(), light->getQuadraticAttenuation());
+        } else if(event->getDispatcher() == linearAttenuationProp) {
+            light->setAttenuation(light->getConstantAttenuation(), linearAttenuationProp->get(), light->getQuadraticAttenuation());
+        } else if(event->getDispatcher() == quadraticAttenuationProp) {
+            light->setAttenuation(light->getConstantAttenuation(), light->getLinearAttenuation(), quadraticAttenuationProp->get());
+        } else if(event->getDispatcher() == castShadowsProp) {
+            light->enableShadows(castShadowsProp->get(), shadowResolutionProp->get());
+        } else if(event->getDispatcher() == shadowMapFOVProp) {
+            light->setShadowMapFOV(shadowMapFOVProp->get());
+        } else if(event->getDispatcher() == shadowResolutionProp) {
+            light->enableShadows(castShadowsProp->get(), shadowResolutionProp->get());
+        } else if(event->getDispatcher() == spotlightCutoffProp) {
+            light->setSpotlightProperties(spotlightCutoffProp->get(), light->getSpotlightExponent());
+        } else if(event->getDispatcher() == spotlightExponentProp) {
+            light->setSpotlightProperties(light->getSpotlightCutoff(), spotlightExponentProp->get());
+        } else if(event->getDispatcher() == importanceProp) {
+            light->setLightImportance(importanceProp->get());
+        }
+
+        updateOptionVisibility();
+    }
+    PropSheet::handleEvent(event);
+}
+
+SceneMeshSheet::SceneMeshSheet() : PropSheet("SCENE MESH", "scene_mesh") {
+    enabled = false;
+    sceneMesh = NULL;
+    
+    gpuSkinningProp = new BoolProp("GPU Skinning");
+    addProp(gpuSkinningProp);
+    
+    backfaceCullProp = new BoolProp("Backface culling");
+    addProp(backfaceCullProp);
+
+    alphaTestProp = new BoolProp("Alpha test");
+    addProp(alphaTestProp);
+    
+}
+
+SceneMeshSheet::~SceneMeshSheet() {
+        
+}
+
+void SceneMeshSheet::setSceneMesh(SceneMesh *mesh) {
+    this->sceneMesh = mesh;
+    
+    if(sceneMesh) {
+        
+        gpuSkinningProp->set(sceneMesh->sendBoneMatricesToMaterial);
+        backfaceCullProp->set(sceneMesh->backfaceCulled);
+        alphaTestProp->set(sceneMesh->alphaTest);
+        
+        enabled = true;
+    } else {
+        enabled = false;
+    }
+}
+
+void SceneMeshSheet::handleEvent(Event *event) {
+    if(!sceneMesh) {
+        return;
+    }
+    
+    if(event->getDispatcher() == gpuSkinningProp) {
+        sceneMesh->sendBoneMatricesToMaterial = gpuSkinningProp->get();
+    } else if(event->getDispatcher() == backfaceCullProp) {
+        sceneMesh->backfaceCulled = backfaceCullProp->get();
+    } else if(event->getDispatcher() == alphaTestProp) {
+        sceneMesh->alphaTest = alphaTestProp->get();
+    }
+
+    
+    PropSheet::handleEvent(event);
+}
+
+
+ScenePrimitiveSheet::ScenePrimitiveSheet() : PropSheet("PRIMITIVE", "scene_primitive") {
+    typeProp = new ComboProp("Type");
+    typeProp->comboEntry->addComboItem("Box");
+    typeProp->comboEntry->addComboItem("Plane");
+    typeProp->comboEntry->addComboItem("Vert. Plane");
+    typeProp->comboEntry->addComboItem("Cylinder");
+    typeProp->comboEntry->addComboItem("Uncapped Cylinder");
+    typeProp->comboEntry->addComboItem("Sphere");
+    typeProp->comboEntry->addComboItem("Torus");
+    typeProp->comboEntry->addComboItem("Cone");
+    typeProp->comboEntry->addComboItem("Circle");
+    typeProp->comboEntry->addComboItem("IcoSphere");
+    typeProp->comboEntry->addComboItem("OctoSphere");
+    
+    addProp(typeProp);
+    
+    option1Prop = new NumberProp("");
+    addProp(option1Prop);
+    
+    option2Prop = new NumberProp("");
+    addProp(option2Prop);
+    
+    option3Prop = new NumberProp("");
+    addProp(option3Prop);
+    
+    option4Prop = new NumberProp("");
+    addProp(option4Prop);
+
+    option5Prop = new NumberProp("");
+    addProp(option5Prop);
+
+    propHeight = 240;
+    
+    enabled = false;
+    primitive = NULL;
+}
+
+void ScenePrimitiveSheet::updatePrimitiveLabels() {
+    if(!primitive) {
+        return;
+    }
+
+    option1Prop->enabled = false;
+    option1Prop->visible = false;
+    option2Prop->enabled = false;
+    option2Prop->visible = false;
+    option3Prop->enabled = false;
+    option3Prop->visible = false;
+    option4Prop->enabled = false;
+    option4Prop->visible = false;
+    option5Prop->enabled = false;
+    option5Prop->visible = false;
+    
+
+    switch(primitive->getPrimitiveType()) {
+        case ScenePrimitive::TYPE_BOX:
+            option1Prop->setPropName("Width");
+            option2Prop->setPropName("Height");
+            option3Prop->setPropName("Depth");
+            
+            option1Prop->enabled = true;
+            option1Prop->visible = true;
+            option2Prop->enabled = true;
+            option2Prop->visible = true;
+            option3Prop->enabled = true;
+            option3Prop->visible = true;
+            
+            propHeight = 45 + (32 * 3);
+        break;
+        case ScenePrimitive::TYPE_PLANE:
+            option1Prop->setPropName("Width");
+            option2Prop->setPropName("Height");
+            
+            option1Prop->enabled = true;
+            option1Prop->visible = true;
+            option2Prop->enabled = true;
+            option2Prop->visible = true;
+            
+            propHeight = 45 + (32 * 2);
+        break;
+        case ScenePrimitive::TYPE_VPLANE:
+            option1Prop->setPropName("Width");
+            option2Prop->setPropName("Height");
+            
+            option1Prop->enabled = true;
+            option1Prop->visible = true;
+            option2Prop->enabled = true;
+            option2Prop->visible = true;
+            
+            propHeight = 45 + (32 * 2);
+        break;
+        case ScenePrimitive::TYPE_CYLINDER:
+            option1Prop->setPropName("Length");
+            option2Prop->setPropName("Radius");
+            option3Prop->setPropName("Segments");
+            
+            option1Prop->enabled = true;
+            option1Prop->visible = true;
+            option2Prop->enabled = true;
+            option2Prop->visible = true;
+            option3Prop->enabled = true;
+            option3Prop->visible = true;
+            
+            propHeight = 45 + (32 * 3);
+        break;
+        case ScenePrimitive::TYPE_UNCAPPED_CYLINDER:
+            option1Prop->setPropName("Length");
+            option2Prop->setPropName("Radius");
+            option3Prop->setPropName("Segments");
+            
+            option1Prop->enabled = true;
+            option1Prop->visible = true;
+            option2Prop->enabled = true;
+            option2Prop->visible = true;
+            option3Prop->enabled = true;
+            option3Prop->visible = true;
+            
+            propHeight = 45 + (32 * 3);
+        break;
+        case ScenePrimitive::TYPE_SPHERE:
+            option1Prop->setPropName("Radius");
+            option2Prop->setPropName("Lat. segments");
+            option3Prop->setPropName("Long. segments");
+            
+            option1Prop->enabled = true;
+            option1Prop->visible = true;
+            option2Prop->enabled = true;
+            option2Prop->visible = true;
+            option3Prop->enabled = true;
+            option3Prop->visible = true;
+            
+            propHeight = 45 + (32 * 3);
+        break;
+        case ScenePrimitive::TYPE_ICOSPHERE:
+            option1Prop->setPropName("Radius");
+            option2Prop->setPropName("Subdivisions");
+            
+            option1Prop->enabled = true;
+            option1Prop->visible = true;
+            option2Prop->enabled = true;
+            option2Prop->visible = true;
+            
+            propHeight = 45 + (32 * 2);
+        break;
+        case ScenePrimitive::TYPE_OCTOSPHERE:
+            option1Prop->setPropName("Radius");
+            option2Prop->setPropName("Subdivisions");
+            
+            option1Prop->enabled = true;
+            option1Prop->visible = true;
+            option2Prop->enabled = true;
+            option2Prop->visible = true;
+            
+            propHeight = 45 + (32 * 2);
+        break;
+        case ScenePrimitive::TYPE_TORUS:
+            option1Prop->setPropName("Torus radius");
+            option2Prop->setPropName("Pipe radius");
+            option3Prop->setPropName("Ring segments");
+            option4Prop->setPropName("Pipe segments");
+            
+            option1Prop->enabled = true;
+            option1Prop->visible = true;
+            option2Prop->enabled = true;
+            option2Prop->visible = true;
+            option3Prop->enabled = true;
+            option3Prop->visible = true;
+            option4Prop->enabled = true;
+            option4Prop->visible = true;
+            
+            propHeight = 45 + (32 * 4);
+        break;
+        case ScenePrimitive::TYPE_CONE:
+            option1Prop->setPropName("Length");
+            option2Prop->setPropName("Radius");
+            option3Prop->setPropName("Segments");
+            
+            option1Prop->enabled = true;
+            option1Prop->visible = true;
+            option2Prop->enabled = true;
+            option2Prop->visible = true;
+            option3Prop->enabled = true;
+            option3Prop->visible = true;
+            
+            propHeight = 45 + (32 * 3);
+        break;
+        case ScenePrimitive::TYPE_CIRCLE:
+            option1Prop->setPropName("Width");
+            option2Prop->setPropName("Height");
+            option3Prop->setPropName("Segments");
+            
+            option1Prop->enabled = true;
+            option1Prop->visible = true;
+            option2Prop->enabled = true;
+            option2Prop->visible = true;
+            option3Prop->enabled = true;
+            option3Prop->visible = true;
+            
+            propHeight = 45 + (32 * 3);
+        break;
+    }
+    dispatchEvent(new Event(), Event::COMPLETE_EVENT);
+}
+
+ScenePrimitiveSheet::~ScenePrimitiveSheet() {
+    
+}
+
+void ScenePrimitiveSheet::setScenePrimitive(ScenePrimitive *primitive) {
+    this->primitive = primitive;
+    if(primitive) {
+        typeProp->set(primitive->getPrimitiveType());
+        option1Prop->set(primitive->getPrimitiveParameter1());
+        option2Prop->set(primitive->getPrimitiveParameter2());
+        option3Prop->set(primitive->getPrimitiveParameter3());
+        option4Prop->set(primitive->getPrimitiveParameter4());
+        option5Prop->set(primitive->getPrimitiveParameter5());
+        updatePrimitiveLabels();
+        enabled = true;
+    } else {
+        enabled = false;
+    }
+}
+
+void ScenePrimitiveSheet::handleEvent(Event *event) {
+    
+    if(!primitive) {
+        return;
+    }
+    
+    if(event->getEventCode() == Event::CHANGE_EVENT) {
+        
+        Number v1 = option1Prop->get();
+        Number v2 = option2Prop->get();
+        Number v3 = option3Prop->get();
+        Number v4 = option4Prop->get();
+        Number v5 = option5Prop->get();
+        
+        if((typeProp->get() == ScenePrimitive::TYPE_ICOSPHERE  && primitive->getPrimitiveType() != ScenePrimitive::TYPE_ICOSPHERE)|| (typeProp->get() == ScenePrimitive::TYPE_OCTOSPHERE  && primitive->getPrimitiveType() != ScenePrimitive::TYPE_OCTOSPHERE)) {
+            option2Prop->set(1.0);
+            v2 = 1.0;
+        }
+        
+        primitive->setPrimitiveOptions(typeProp->get(), v1, v2, v3, v4, v5);
+           
+        if(event->getDispatcher() == typeProp) {
+            updatePrimitiveLabels();
+        }
+    }
+    
+    PropSheet::handleEvent(event);
+}
+
+MaterialPropSheet::MaterialPropSheet() : PropSheet("MATERIAL", "material") {
+    
+    materialProp = new MaterialProp("Material");
+    addProp(materialProp);
+    
+    enabled = false;
+}
+
+MaterialPropSheet::~MaterialPropSheet() {
+    
+}
+
+void MaterialPropSheet::setSceneMesh(SceneMesh *sceneMesh) {
+    this->sceneMesh = sceneMesh;
+    
+    if(sceneMesh) {
+        enabled = true;
+        materialProp->set(sceneMesh->getMaterial());
+    } else {
+        enabled = false;
+    }
+}
+
+void MaterialPropSheet::setEntityInstance(SceneEntityInstance *instance) {
+    materialProp->setEntityInstance(instance);
+}
+
+void MaterialPropSheet::handleEvent(Event *event) {
+    if(!sceneMesh) {
+        PropSheet::handleEvent(event);
+        return;
+    }
+        
+    if(event->getDispatcher() == materialProp  && event->getEventCode() == Event::CHANGE_EVENT) {
+        Material *newMaterial = materialProp->get();
+        if(sceneMesh->getMaterial() != newMaterial) {
+            sceneMesh->setMaterial(newMaterial);
+            dispatchEvent(new Event(), Event::CHANGE_EVENT);
+        }
+    }
+    PropSheet::handleEvent(event);
+}
+
+void EntitySheet::setEntityInstance(SceneEntityInstance *instance) {
+    this->instance = instance;
 }
 
 EntitySheet::EntitySheet() : PropSheet("ENTITY", "entity"){
+    
+    layersProp = new ComboProp("Layer");
+    addProp(layersProp);
+    
 	idProp = new StringProp("ID");
 	addProp(idProp);
 
@@ -2191,7 +3211,11 @@ EntitySheet::EntitySheet() : PropSheet("ENTITY", "entity"){
 	
 	blendingProp = new ComboProp("Blend mode");
 	addProp(blendingProp);
-	
+    
+    bBoxProp = new Vector3Prop("Bounding box");
+	addProp(bBoxProp);
+    
+    blendingProp->comboEntry->addComboItem("None");
 	blendingProp->comboEntry->addComboItem("Normal");
 	blendingProp->comboEntry->addComboItem("Lighten");
 	blendingProp->comboEntry->addComboItem("Color");
@@ -2201,7 +3225,7 @@ EntitySheet::EntitySheet() : PropSheet("ENTITY", "entity"){
 	propHeight = 160;
 	
 	entity = NULL;
-	lastEntity = NULL;
+    enabled = false;
 }
 
 EntitySheet::~EntitySheet() {
@@ -2219,6 +3243,8 @@ void EntitySheet::handleEvent(Event *event) {
 		entity->color = colorProp->get();
 	}else if(event->getDispatcher() == idProp  && event->getEventCode() == Event::CHANGE_EVENT) {
 		entity->id = idProp->get();
+	}else if(event->getDispatcher() == bBoxProp  && event->getEventCode() == Event::CHANGE_EVENT) {
+		entity->setLocalBoundingBox(bBoxProp->get());
 	} else if(event->getDispatcher() == tagProp  && event->getEventCode() == Event::CHANGE_EVENT) {
 		
 		String tagString = "";
@@ -2235,572 +3261,353 @@ void EntitySheet::handleEvent(Event *event) {
 		for(int i=0; i < tags.size(); i++) {
 			entity->addTag(tags[i]);
 		}		
+	} else if(event->getDispatcher() == layersProp  && event->getEventCode() == Event::CHANGE_EVENT) {
+        SceneEntityInstanceLayer *layer = (SceneEntityInstanceLayer*)layersProp->comboEntry->getSelectedItem()->data;
+        entity->layerID = layer->layerID;
 	}
-	
 	PropSheet::handleEvent(event);	
 }
 
-void EntitySheet::Update() {
-	if(entity) {
-		
-		enabled = true;
-		
-		if(entity != lastEntity) {	
-			idProp->set(entity->id);			
-			
-			String tagString = "";
-			for(int i=0; i < entity->getNumTags(); i++) {
-				if(i != 0) {
-					tagString += ",";
-				}
-				tagString += entity->getTagAtIndex(i);
-			}
-			tagProp->set(tagString);
-			
-			colorProp->set(entity->color);			
-			blendingProp->set(entity->blendingMode);
-			
-			lastEntity = entity;			
-		}
-	} else {
-		enabled = false;
-	}
+void EntitySheet::refreshLayers() {
+    layersProp->comboEntry->clearItems();
+    
+    for(int i=0; i < instance->getNumLayers(); i++) {
+        SceneEntityInstanceLayer *layer = instance->getLayerAtIndex(i);
+        layersProp->comboEntry->addComboItem(layer->name, (void*)layer);
+        if(layer->layerID == entity->layerID) {
+            layersProp->comboEntry->setSelectedIndex(i);
+        }
+    }
 }
 
-
-ScreenParticleSheet::ScreenParticleSheet() : PropSheet("PARTICLE EMITTER", "ScreenParticleEmitter") {
-
-	textureProp = new TextureProp("Texture");
-	addProp(textureProp);
-
-	blendingProp = new ComboProp("Blend mode");
-	addProp(blendingProp);
-	
-	blendingProp->comboEntry->addComboItem("Normal");
-	blendingProp->comboEntry->addComboItem("Lighten");
-	blendingProp->comboEntry->addComboItem("Color");
-	blendingProp->comboEntry->addComboItem("Premultiplied");
-	blendingProp->comboEntry->addComboItem("Multiply");
-
-	ignoreParentMatrixProp = new BoolProp("No parent matrix");
-	addProp(ignoreParentMatrixProp);
-	
-	numParticlesProp = new NumberProp("Num particles");
-	addProp(numParticlesProp);
-		
-	lifespanProp = new NumberProp("Lifespan (secs)");
-	addProp(lifespanProp);
-
-	particleScaleProp = new NumberProp("Size");
-	addProp(particleScaleProp);
-	
-	sizeProp = new Vector2Prop("Emitter size");
-	addProp(sizeProp);
-
-	dirProp = new Vector2Prop("Direction");
-	addProp(dirProp);
-
-	gravProp = new Vector2Prop("Gravity");
-	addProp(gravProp);
-
-	deviationProp = new Vector2Prop("Deviation");
-	addProp(deviationProp);
-
-	brightnessDeviationProp = new SliderProp("Brightness var", 0.0, 1.0);
-	addProp(brightnessDeviationProp);
-
-	perlinEnableProp = new BoolProp("Perlin mod");
-	addProp(perlinEnableProp);
-	
-	perlinModSizeProp = new NumberProp("Perlin size");
-	addProp(perlinModSizeProp);
-
-	speedModProp = new SliderProp("Speed mod", 0.0, 2.0);
-	addProp(speedModProp);
-
-	rotationSpeedProp = new NumberProp("Rot. speed");
-	addProp(rotationSpeedProp);
-	
-	rotationFollowsPathProp = new BoolProp("Auto-orient");
-	addProp(rotationFollowsPathProp);
-	
-	useScaleCurvesProp = new BoolProp("Scale curves");
-	addProp(useScaleCurvesProp);
-	
-	scaleCurveProp = new BezierCurveProp("Edit scale", "Scale");
-	addProp(scaleCurveProp);
-
-	useColorCurvesProp = new BoolProp("Color curves");
-	addProp(useColorCurvesProp);
-	
-	colorCurveProp = new BezierRGBACurveProp("Edit color");
-	addProp(colorCurveProp);
-	
-	emitter = NULL;
-	propHeight = 680;
+void EntitySheet::setEntity(Entity *entity) {
+    this->entity = entity;
+    if(entity) {
+        idProp->set(entity->id);
+        
+        String tagString = "";
+        for(int i=0; i < entity->getNumTags(); i++) {
+            if(i != 0) {
+                tagString += ",";
+            }
+            tagString += entity->getTagAtIndex(i);
+        }
+        tagProp->set(tagString);
+        
+        colorProp->set(entity->color);
+        blendingProp->set(entity->blendingMode);
+        
+        bBoxProp->set(entity->getLocalBoundingBox());
+        refreshLayers();
+        enabled = true;
+    } else {
+        enabled = false;
+    }
 }
 
-void ScreenParticleSheet::handleEvent(Event *event) {
+CameraSheet::CameraSheet() : PropSheet("CAMERA", "camera") {
+    enabled = false;
+    camera = NULL;
+    
+    exposureProp = new NumberProp("Exposure");
+    addProp(exposureProp);
 
-	if(!emitter)
-		return;
-		
-	if(event->getDispatcher() == blendingProp  && event->getEventCode() == Event::CHANGE_EVENT) {
-		emitter->setParticleBlendingMode(blendingProp->get());
-		dispatchEvent(new Event(), Event::CHANGE_EVENT);
-	}
-		
+    nearClipPlane = new NumberProp("Near clip");
+    addProp(nearClipPlane);
+    
+    farClipPlane = new NumberProp("Far clip");
+    addProp(farClipPlane);
+    
+    orthoProp = new BoolProp("Orthographic");
+    addProp(orthoProp);
 
-	if(event->getDispatcher() == sizeProp  && event->getEventCode() == Event::CHANGE_EVENT) {
-		lastSize = Vector3(sizeProp->get().x, sizeProp->get().y, 0.0);
-		emitter->emitterRadius = lastSize;
-		emitter->resetAll();		
-		dispatchEvent(new Event(), Event::CHANGE_EVENT);
-	}
-	
-	if(event->getDispatcher() == dirProp  && event->getEventCode() == Event::CHANGE_EVENT) {
-		lastDir = Vector3(dirProp->get().x, dirProp->get().y, 0.0);
-		emitter->dirVector = lastDir;
-		emitter->resetAll();
-		dispatchEvent(new Event(), Event::CHANGE_EVENT);
-	}
+    fovProp = new NumberProp("FOV");
+    addProp(fovProp);
 
-	if(event->getDispatcher() == gravProp  && event->getEventCode() == Event::CHANGE_EVENT) {
-		lastGrav = Vector3(gravProp->get().x, gravProp->get().y, 0.0);
-		emitter->gravVector = lastGrav;
-		emitter->resetAll();
-		dispatchEvent(new Event(), Event::CHANGE_EVENT);
-	}
+    orthoSizeTypeProp = new ComboProp("Size mode");
+    orthoSizeTypeProp->comboEntry->addComboItem("Manual");
+    orthoSizeTypeProp->comboEntry->addComboItem("Lock height");
+    orthoSizeTypeProp->comboEntry->addComboItem("Lock width");
+    orthoSizeTypeProp->comboEntry->addComboItem("Viewport");
+    
+    addProp(orthoSizeTypeProp);
+    
+    orthoWidthProp = new NumberProp("Ortho width");
+    addProp(orthoWidthProp);
 
-
-	if(event->getDispatcher() == deviationProp  && event->getEventCode() == Event::CHANGE_EVENT) {
-		lastDeviation = Vector3(deviationProp->get().x, deviationProp->get().y, 0.0);
-		emitter->deviation = lastDeviation;
-		emitter->resetAll();		
-		dispatchEvent(new Event(), Event::CHANGE_EVENT);
-	}
-	
-	if(event->getDispatcher() == particleScaleProp  && event->getEventCode() == Event::CHANGE_EVENT) {
-		lastParticleScale = particleScaleProp->get();
-		emitter->particleSize = lastParticleScale;
-		dispatchEvent(new Event(), Event::CHANGE_EVENT);
-	}	
-
-	if(event->getDispatcher() == brightnessDeviationProp  && event->getEventCode() == Event::CHANGE_EVENT) {
-		lastBrightnessDeviation = brightnessDeviationProp->get();
-		emitter->brightnessDeviation = lastBrightnessDeviation;
-		dispatchEvent(new Event(), Event::CHANGE_EVENT);
-	}
-	
-	if(event->getDispatcher() == perlinModSizeProp  && event->getEventCode() == Event::CHANGE_EVENT) {
-		lastPerlinSize = perlinModSizeProp->get();
-		emitter->perlinModSize = lastPerlinSize;
-		emitter->resetAll();		
-		dispatchEvent(new Event(), Event::CHANGE_EVENT);
-	}	
-	
-	if(event->getDispatcher() == speedModProp  && event->getEventCode() == Event::CHANGE_EVENT) {
-		lastSpeedMod = speedModProp->get();
-		emitter->particleSpeedMod = lastSpeedMod;
-		emitter->resetAll();		
-		dispatchEvent(new Event(), Event::CHANGE_EVENT);
-	}		
-
-	if(event->getDispatcher() == perlinEnableProp  && event->getEventCode() == Event::CHANGE_EVENT) {
-		lastEnableProp = perlinEnableProp->get();
-		emitter->perlinEnabled = lastEnableProp;
-		emitter->resetAll();		
-		dispatchEvent(new Event(), Event::CHANGE_EVENT);
-	}	
-	
-	if(event->getDispatcher() == lifespanProp  && event->getEventCode() == Event::CHANGE_EVENT) {
-		lastLifespan = lifespanProp->get();
-		emitter->lifespan = lastLifespan;
-		emitter->resetAll();
-		dispatchEvent(new Event(), Event::CHANGE_EVENT);
-	}		
-
-	if(event->getDispatcher() == numParticlesProp  && event->getEventCode() == Event::CHANGE_EVENT) {
-		lastNumParticles = numParticlesProp->get();
-		emitter->setParticleCount(lastNumParticles);
-		dispatchEvent(new Event(), Event::CHANGE_EVENT);
-	}
-	
-	if(event->getDispatcher() == textureProp) {
-		Texture *selectedTexture = textureProp->previewShape->getTexture();		
-		emitter->setParticleTexture(selectedTexture);
-		dispatchEvent(new Event(), Event::CHANGE_EVENT);
-	}			
-
-	if(event->getDispatcher() == rotationSpeedProp  && event->getEventCode() == Event::CHANGE_EVENT) {
-		lastRotationSpeed = rotationSpeedProp->get();
-		emitter->rotationSpeed = lastRotationSpeed;		
-		dispatchEvent(new Event(), Event::CHANGE_EVENT);
-	}	
-	
-	if(event->getDispatcher() == rotationFollowsPathProp  && event->getEventCode() == Event::CHANGE_EVENT) {
-		lastRotationFollowsPath = rotationFollowsPathProp->get();
-		emitter->rotationFollowsPath = lastRotationFollowsPath;		
-		dispatchEvent(new Event(), Event::CHANGE_EVENT);
-	}	
-
-	if(event->getDispatcher() == ignoreParentMatrixProp  && event->getEventCode() == Event::CHANGE_EVENT) {
-		lastIgnoreParentMatrix = ignoreParentMatrixProp->get();
-		emitter->setIgnoreParentMatrix(lastIgnoreParentMatrix);		
-		dispatchEvent(new Event(), Event::CHANGE_EVENT);
-	}	
-	
-	if(event->getDispatcher() == useScaleCurvesProp  && event->getEventCode() == Event::CHANGE_EVENT) {
-		lastUseScaleCurves = useScaleCurvesProp->get();
-		emitter->useScaleCurves = lastUseScaleCurves;		
-		dispatchEvent(new Event(), Event::CHANGE_EVENT);
-	}		
-
-	if(event->getDispatcher() == useColorCurvesProp  && event->getEventCode() == Event::CHANGE_EVENT) {
-		lastUseColorCurves = useColorCurvesProp->get();
-		emitter->useColorCurves = lastUseColorCurves;		
-		dispatchEvent(new Event(), Event::CHANGE_EVENT);
-	}		
-	
-	
-	PropSheet::handleEvent(event);
+    orthoHeightProp = new NumberProp("Ortho height");
+    addProp(orthoHeightProp);
+    
+    propHeight = 260;
 }
 
-void ScreenParticleSheet::Update() {
-	if(emitter) {
-	
-		enabled = true;	
-	
-		if(emitter->emitterRadius != lastSize) {
-			sizeProp->set(Vector2(emitter->emitterRadius.x, emitter->emitterRadius.y));
-			lastSize = emitter->emitterRadius;
-		}
-		
-		if(emitter->dirVector != lastDir) {
-			dirProp->set(Vector2(emitter->dirVector.x, emitter->dirVector.y));
-			lastDir = emitter->dirVector;
-		}		
-
-		if(emitter->gravVector != lastGrav) {
-			gravProp->set(Vector2(emitter->gravVector.x, emitter->gravVector.y));
-			lastGrav = emitter->gravVector;
-		}		
-
-		if(emitter->deviation != lastDeviation) {
-			deviationProp->set(Vector2(emitter->emitterRadius.x, emitter->emitterRadius.y));
-			lastSize = emitter->emitterRadius;
-		}
-
-		if(emitter->getIgnoreParentMatrix() != lastIgnoreParentMatrix) {
-			ignoreParentMatrixProp->set(emitter->getIgnoreParentMatrix());
-			lastIgnoreParentMatrix = emitter->getIgnoreParentMatrix();
-		}
-				
-		if(emitter->brightnessDeviation != lastBrightnessDeviation) {
-			lastBrightnessDeviation = emitter->brightnessDeviation;
-			brightnessDeviationProp->set(lastBrightnessDeviation);
-		}
-
-		if(emitter->particleSize != lastParticleScale) {
-			lastParticleScale = emitter->particleSize;
-			particleScaleProp->set(lastParticleScale);
-		}
-		
-		if(emitter->perlinModSize != lastPerlinSize) {
-			lastPerlinSize = emitter->perlinModSize;
-			perlinModSizeProp->set(lastPerlinSize);
-		}
-
-		if(emitter->perlinEnabled != lastEnableProp) {
-			lastEnableProp = emitter->perlinEnabled;
-			perlinEnableProp->set(lastEnableProp);
-		}
-
-		if(emitter->particleSpeedMod != lastSpeedMod) {
-			lastSpeedMod = emitter->particleSpeedMod;
-			speedModProp->set(lastSpeedMod);
-		}
-
-		if(emitter->rotationSpeed != lastRotationSpeed) {
-			lastRotationSpeed = emitter->rotationSpeed;
-			rotationSpeedProp->set(lastRotationSpeed);
-		}
-		
-		if(emitter->lifespan != lastLifespan) {
-			lastLifespan = emitter->lifespan;
-			lifespanProp->set(lastLifespan);
-		}
-		
-		if(emitter->getNumParticles() != lastNumParticles) {
-			lastNumParticles = emitter->getNumParticles();
-			numParticlesProp->set(lastNumParticles);
-		}
-		
-		if(emitter->rotationFollowsPath != lastRotationFollowsPath) {
-			lastRotationFollowsPath = emitter->rotationFollowsPath;
-			rotationFollowsPathProp->set(lastRotationFollowsPath);
-		}
-		
-		
-		if(emitter->rotationFollowsPath != lastRotationFollowsPath) {
-			lastRotationFollowsPath = emitter->rotationFollowsPath;
-			rotationFollowsPathProp->set(lastRotationFollowsPath);
-		}
-		
-		if(emitter->useScaleCurves != lastUseScaleCurves) {
-			lastUseScaleCurves = emitter->useScaleCurves;
-			useScaleCurvesProp->set(lastUseScaleCurves);
-		}
-
-		if((&emitter->scaleCurve) != lastScaleCurve) {
-			lastScaleCurve = &emitter->scaleCurve;
-			scaleCurveProp->curve = lastScaleCurve;
-		}
-		
-		
-		if(emitter->useColorCurves != lastUseColorCurves) {
-			lastUseColorCurves = emitter->useColorCurves;
-			useColorCurvesProp->set(lastUseColorCurves);
-		}
-
-		blendingProp->set(emitter->getParticleBlendingMode());
-
-		colorCurveProp->curveR = &emitter->colorCurveR;
-		colorCurveProp->curveG = &emitter->colorCurveG;		
-		colorCurveProp->curveB = &emitter->colorCurveB;
-		colorCurveProp->curveA = &emitter->colorCurveA;			
-				
-		textureProp->set(emitter->getParticleTexture());
-		
-	} else {
-		enabled = false;
-	}
+void CameraSheet::updateOptionVisibility() {
+    if(!camera) {
+        return;
+    }
+    
+    if(camera->getOrthoMode()) {
+        fovProp->enabled = false;
+        orthoSizeTypeProp->enabled = true;
+        
+        switch(camera->getOrthoSizeMode()) {
+            case Camera::ORTHO_SIZE_MANUAL:
+                orthoWidthProp->enabled = true;
+                orthoHeightProp->enabled = true;
+            break;
+            case Camera::ORTHO_SIZE_LOCK_HEIGHT:
+                orthoWidthProp->enabled = false;
+                orthoHeightProp->enabled = true;
+            break;
+            case Camera::ORTHO_SIZE_LOCK_WIDTH:
+                orthoWidthProp->enabled = true;
+                orthoHeightProp->enabled = false;
+            break;
+            case Camera::ORTHO_SIZE_VIEWPORT:
+                orthoWidthProp->enabled = false;
+                orthoHeightProp->enabled = false;
+            break;
+        }
+    } else {
+        fovProp->enabled = true;
+        orthoSizeTypeProp->enabled = false;
+        orthoWidthProp->enabled = false;
+        orthoHeightProp->enabled = false;
+    }
+    layoutProps();
 }
-		
 
-ScreenParticleSheet::~ScreenParticleSheet() {
+CameraSheet::~CameraSheet() {
+    
+}
+
+void CameraSheet::handleEvent(Event *event) {
+    if(!camera) {
+        return;
+    }
+    
+    if(event->getDispatcher() == fovProp) {
+        camera->setFOV(fovProp->get());
+        dispatchEvent(new Event(), Event::CHANGE_EVENT);
+    } else if(event->getDispatcher() == exposureProp) {
+        camera->setExposureLevel(exposureProp->get());
+        dispatchEvent(new Event(), Event::CHANGE_EVENT);
+    } else if(event->getDispatcher() == orthoProp) {
+        camera->setOrthoMode(orthoProp->get());
+        dispatchEvent(new Event(), Event::CHANGE_EVENT);
+    } else if(event->getDispatcher() == orthoWidthProp) {
+        camera->setOrthoSize(orthoWidthProp->get(), camera->getOrthoSizeY());
+        dispatchEvent(new Event(), Event::CHANGE_EVENT);
+    } else if(event->getDispatcher() == orthoHeightProp) {
+        camera->setOrthoSize(camera->getOrthoSizeX(), orthoHeightProp->get());
+        dispatchEvent(new Event(), Event::CHANGE_EVENT);
+    } else if(event->getDispatcher() == nearClipPlane) {
+        camera->setClippingPlanes(nearClipPlane->get(), camera->getFarClippingPlane());
+        dispatchEvent(new Event(), Event::CHANGE_EVENT);
+    } else if(event->getDispatcher() == farClipPlane) {
+        camera->setClippingPlanes(camera->getNearClippingPlane(),farClipPlane->get());
+        dispatchEvent(new Event(), Event::CHANGE_EVENT);
+    } else if(event->getDispatcher() == orthoSizeTypeProp) {
+        camera->setOrthoSizeMode(orthoSizeTypeProp->get());
+        dispatchEvent(new Event(), Event::CHANGE_EVENT);
+    }
+
+    updateOptionVisibility();
+    
+    PropSheet::handleEvent(event);
+}
+
+void CameraSheet::setCamera(Camera *camera) {
+    this->camera = camera;
+    if(camera) {
+        enabled = true;
+        
+        exposureProp->set(camera->getExposureLevel());
+        orthoProp->set(camera->getOrthoMode());
+        orthoWidthProp->set(camera->getOrthoSizeX());
+        orthoHeightProp->set(camera->getOrthoSizeY());
+        nearClipPlane->set(camera->getNearClippingPlane());
+        farClipPlane->set(camera->getFarClippingPlane());
+        
+        orthoSizeTypeProp->set(camera->getOrthoSizeMode());
+        fovProp->set(camera->getFOV());
+        
+        updateOptionVisibility();
+    } else {
+        enabled = false;
+    }
+}
+
+SceneCurveSheet::SceneCurveSheet() : PropSheet("CURVE", "SceneCurve") {
+    curve = NULL;
+    enabled = false;
+    
+    addPointProp = new ButtonProp("Add Curve Point");
+    addProp(addPointProp);
+    addPointProp->getButton()->addEventListener(this, UIEvent::CLICK_EVENT);
+
+    renderProp = new BoolProp("Render");
+    addProp(renderProp);
+    renderProp->addEventListener(this, Event::CHANGE_EVENT);
+
+    numPointsProp = new NumberProp("Resolution");
+    addProp(numPointsProp);
+    numPointsProp->addEventListener(this, Event::CHANGE_EVENT);
 
 }
 
-Transform2DSheet::Transform2DSheet() : PropSheet("2D TRANSFORM", "transform2d") {
-
-	positionProp = new Vector2Prop("Position");
-	addProp(positionProp);
-
-	scaleProp = new Vector2Prop("Scale");
-	addProp(scaleProp);
-
-	rotationProp = new NumberProp("Rotation (deg)");
-	addProp(rotationProp);
-
-	topLeftProp = new BoolProp("Topleft anchor");
-	addProp(topLeftProp);
-	
-	entity = NULL;
-	propHeight = 160;
+SceneCurveSheet::~SceneCurveSheet() {
+    
 }
 
-void Transform2DSheet::handleEvent(Event *event) {
+void SceneCurveSheet::handleEvent(Event *event) {
+    if(!curve) {
+        return;
+    }
+    
+	if(event->getDispatcher() == renderProp) {
+        curve->renderCurve = renderProp->get();
+    } else if(event->getDispatcher() == numPointsProp) {
+        curve->curveResolution = (int)numPointsProp->get();
+    } else if(event->getDispatcher() == addPointProp->getButton()) {
+        
+        BezierPoint *lastPoint = curve->getCurve()->getControlPoint(curve->getCurve()->getNumControlPoints()-1);
 
-	if(!entity)
-		return;
-
-	if(event->getDispatcher() == positionProp  && event->getEventCode() == Event::CHANGE_EVENT) {
-		lastPositon = positionProp->get();
-		entity->setPosition(lastPositon);
-		dispatchEvent(new Event(), Event::CHANGE_EVENT);
-	}
-
-	if(event->getDispatcher() == scaleProp  && event->getEventCode() == Event::CHANGE_EVENT) {
-		lastScale = scaleProp->get();
-		entity->setScale(lastScale);
-		dispatchEvent(new Event(), Event::CHANGE_EVENT);
-	}
-
-	if(event->getDispatcher() == rotationProp  && event->getEventCode() == Event::CHANGE_EVENT) {
-		lastRotation = rotationProp->get();
-		entity->setRotation(lastRotation);
-		dispatchEvent(new Event(), Event::CHANGE_EVENT);
-	}
-
-	if(event->getDispatcher() == topLeftProp  && event->getEventCode() == Event::CHANGE_EVENT) {
-		if(topLeftProp->get()) {
-			lastPositionMode = ScreenEntity::POSITION_TOPLEFT;
-			entity->setPositionMode(lastPositionMode);
-		} else {
-			lastPositionMode = ScreenEntity::POSITION_CENTER;
-			entity->setPositionMode(lastPositionMode);		
-		}
-		dispatchEvent(new Event(), Event::CHANGE_EVENT);
-	}
-
-
-	PropSheet::handleEvent(event);
+        Vector3 directionOffsetPoint = curve->getCurve()->getPointAt(0.9);
+        
+        Vector3 directionNormal = lastPoint->p2 - directionOffsetPoint;
+        directionNormal.Normalize();
+        
+        Vector3 newPoint1 = lastPoint->p2 + (directionNormal * 1.0);
+        Vector3 newPoint2 = lastPoint->p2 + (directionNormal * 2.0);
+        Vector3 newPoint3 = lastPoint->p2 + (directionNormal* 3.0);
+        
+        curve->getCurve()->addControlPoint(newPoint1.x, newPoint1.y, newPoint1.z,
+                                        newPoint2.x, newPoint2.y, newPoint2.z,
+                                        newPoint3.x, newPoint3.y, newPoint3.z);
+        
+    }
+    
+    PropSheet::handleEvent(event);
 }
 
-void Transform2DSheet::Update() {
-	if(entity) {
-	
-		enabled = true;	
-	
-		if(entity->getPosition2D() != lastPositon) {
-			positionProp->set(entity->getPosition2D());
-			lastPositon = entity->getPosition2D();
-		}
-		
-		if(entity->getScale2D() != lastScale) {
-			scaleProp->set(entity->getScale2D());
-			lastScale = entity->getScale2D();
-		}
-
-		if(entity->getPositionMode() != lastPositionMode) {
-			if(entity->getPositionMode() == ScreenEntity::POSITION_TOPLEFT) {
-				topLeftProp->set(true);
-			} else {
-				topLeftProp->set(false);			
-			}
-		
-			lastPositionMode = entity->getPositionMode();
-		}
-
-		
-		if(entity->getRotation() != lastRotation) {
-			lastRotation = entity->getRotation();
-			rotationProp->set(lastRotation);
-		}
-	} else {
-		enabled = false;
-	}
-}
-		
-
-Transform2DSheet::~Transform2DSheet() {
-
+void SceneCurveSheet::setCurve(SceneCurve *curve) {
+    this->curve = curve;
+    if(curve) {
+        renderProp->set(curve->renderCurve);
+        numPointsProp->set(curve->curveResolution);
+        enabled = true;
+    } else {
+        enabled = false;
+    }
 }
 
-ScreenImageSheet::ScreenImageSheet() : PropSheet("SCREEN IMAGE", "ScreenImage") {
-	image = NULL;
-	
-	texture = new TextureProp("Texture");
-	texture->addEventListener(this, Event::CHANGE_EVENT);
-	addProp(texture);
-	
-	propHeight = 100;
-}
 
-ScreenImageSheet::~ScreenImageSheet() {
-
-}
-		
-void ScreenImageSheet::handleEvent(Event *event) {
-	if(!image)
-		return;
-
-	if(event->getDispatcher() == texture) {
-		Texture *selectedTexture = texture->previewShape->getTexture();
-		
-		image->setTexture(selectedTexture);
-		selectedTexture->reloadOnFileModify = true;
-		image->setShapeSize(selectedTexture->getWidth(), selectedTexture->getHeight());
-		dispatchEvent(new Event(), Event::CHANGE_EVENT);
-	}
-	
-	PropSheet::handleEvent(event);
-}
-
-void ScreenImageSheet::Update() {
-	if(image) {
-		enabled = true;	
-		texture->set(image->getTexture());
-	} else {
-		enabled = false;
-	}
-}
-
-ScreenSpriteSheet::ScreenSpriteSheet() : PropSheet("SCREEN SPRITE", "ScreenSprite") {
+SceneSpriteSheet::SceneSpriteSheet() : PropSheet("SPRITE", "SceneSprite") {
 	sprite = NULL;
-	lastSprite = NULL;
+    enabled = false;
 	
-	spriteProp = new ScreenSpriteProp("Sprite");
-	spriteProp->addEventListener(this, Event::CHANGE_EVENT);
-	addProp(spriteProp);	
+    spriteProp = new SceneSpriteProp("Sprite");
+    spriteProp->addEventListener(this, Event::CHANGE_EVENT);
+    addProp(spriteProp);
 	
-	defaultAnimationProp = new ComboProp("Animation");
-	defaultAnimationProp->addEventListener(this, Event::CHANGE_EVENT);
-	addProp(defaultAnimationProp);	
-	
-	propHeight = 140;
+	defaultStateProp = new ComboProp("State");
+	defaultStateProp->addEventListener(this, Event::CHANGE_EVENT);
+	addProp(defaultStateProp);
+
+    randomFrameProp = new BoolProp("Random start frame");
+    randomFrameProp->addEventListener(this, Event::CHANGE_EVENT);
+    addProp(randomFrameProp);
+    
+	propHeight = 190;
 }
 
-ScreenSpriteSheet::~ScreenSpriteSheet() {
+SceneSpriteSheet::~SceneSpriteSheet() {
 
 }
-		
-void ScreenSpriteSheet::handleEvent(Event *event) {
+
+void SceneSpriteSheet::setEntityInstance(SceneEntityInstance *instance) {
+    spriteProp->setEntityInstance(instance);
+}
+
+void SceneSpriteSheet::handleEvent(Event *event) {
 	if(!sprite)
 		return;
 
-	if(event->getDispatcher() == sprite->getResourceEntry()) {
-		spriteProp->previewSprite->reloadSprite();
-		sprite->getResourceEntry()->removeAllHandlersForListener(this);
-		lastSprite = NULL;
+	if(event->getDispatcher() == defaultStateProp) {
+		sprite->setSpriteStateByName(defaultStateProp->comboEntry->getSelectedItem()->label, 0, false);
+            spriteProp->previewSprite->setSpriteStateByName(defaultStateProp->comboEntry->getSelectedItem()->label, 0, false);
 	}
 
-	if(event->getDispatcher() == defaultAnimationProp) {
-		sprite->playAnimation(defaultAnimationProp->comboEntry->getSelectedItem()->label, 0, false);
-		spriteProp->previewSprite->playAnimation(defaultAnimationProp->comboEntry->getSelectedItem()->label, 0, false);
-	}
-
+	if(event->getDispatcher() == randomFrameProp) {
+        sprite->setStartOnRandomFrame(randomFrameProp->get());
+    }
+    
 	if(event->getDispatcher() == spriteProp) {
-		sprite->loadFromFile(spriteProp->get());
-			defaultAnimationProp->comboEntry->clearItems();
-			for(int i=0; i < sprite->getNumAnimations(); i++) {
-				defaultAnimationProp->comboEntry->addComboItem(sprite->getAnimationAtIndex(i)->name);
-			}
-		
+        sprite->setSprite(spriteProp->get());
+        defaultStateProp->comboEntry->clearItems();
+        
+        if(spriteProp->get()->getNumStates() > 0) {
+            sprite->setSpriteState(spriteProp->get()->getState(0), 0, false);
+        }
+
+        Sprite *spriteEntry = sprite->getCurrentSprite();
+        for(int i=0; i < spriteEntry->getNumStates(); i++) {
+            defaultStateProp->comboEntry->addComboItem(spriteEntry->getState(i)->getName());
+            
+            if(sprite->getCurrentSpriteState()) {
+                if(sprite->getCurrentSpriteState() == spriteEntry->getState(i)) {
+                    defaultStateProp->comboEntry->setSelectedIndex(i);
+                    //spriteProp->previewSprite->setSpriteStateByName(defaultStateProp->comboEntry->getSelectedItem()->label, 0, false);
+                }
+            }
+        }
 	}
-	
+
 	PropSheet::handleEvent(event);
 }
 
-void ScreenSpriteSheet::Update() {
-	if(sprite) {	
-		if(lastSprite != sprite) {
-			defaultAnimationProp->comboEntry->clearItems();
-			for(int i=0; i < sprite->getNumAnimations(); i++) {
-				defaultAnimationProp->comboEntry->addComboItem(sprite->getAnimationAtIndex(i)->name);
-				if(sprite->getCurrentAnimation()) {
-					if(sprite->getCurrentAnimation()->name == sprite->getAnimationAtIndex(i)->name) {
-						defaultAnimationProp->comboEntry->setSelectedIndex(i);
-						spriteProp->previewSprite->playAnimation(sprite->getCurrentAnimation()->name, 0, false);
+void SceneSpriteSheet::setSprite(SceneSprite *sprite) {
+    this->sprite = sprite;
+    
+	if(sprite) {
+            spriteProp->set(sprite->getCurrentSprite());
+			defaultStateProp->comboEntry->clearItems();
+        
+            Sprite *spriteEntry = sprite->getCurrentSprite();
+			for(int i=0; i < spriteEntry->getNumStates(); i++) {
+				defaultStateProp->comboEntry->addComboItem(spriteEntry->getState(i)->getName());
+                
+				if(sprite->getCurrentSpriteState()) {
+					if(sprite->getCurrentSpriteState() == spriteEntry->getState(i)) {
+						defaultStateProp->comboEntry->setSelectedIndex(i);
+						//spriteProp->previewSprite->setSpriteStateByName(defaultStateProp->comboEntry->getSelectedItem()->label, 0, false);
 					}
 				}
 			}
-			lastSprite = sprite;
-		}	
-		enabled = true;	
-		spriteProp->set(sprite->getFileName());
-		sprite->getResourceEntry()->addEventListener(this, Event::RESOURCE_RELOAD_EVENT);
+            randomFrameProp->set(sprite->getStartOnRandomFrame());
+
+		enabled = true;
 	} else {
 		enabled = false;
 	}
 }
 
-ScreenEntityInstanceSheet::ScreenEntityInstanceSheet() : PropSheet("ENTITY INSTANCE", "ScreenEntityInstance") {
+SceneEntityInstanceSheet::SceneEntityInstanceSheet() : PropSheet("ENTITY INSTANCE", "SceneEntityInstance") {
 	instance = NULL;
 	
-	instanceProp = new ScreenEntityInstanceProp("Entity file");
+	instanceProp = new SceneEntityInstanceProp("Entity file");
 	instanceProp->addEventListener(this, Event::CHANGE_EVENT);
 	addProp(instanceProp);
 	
 	propHeight = 100;
 }
 
-ScreenEntityInstanceSheet::~ScreenEntityInstanceSheet() {
+SceneEntityInstanceSheet::~SceneEntityInstanceSheet() {
 
 }
 		
-void ScreenEntityInstanceSheet::handleEvent(Event *event) {
+void SceneEntityInstanceSheet::handleEvent(Event *event) {
 	if(!instance)
 		return;
 
@@ -2817,7 +3624,7 @@ void ScreenEntityInstanceSheet::handleEvent(Event *event) {
 	PropSheet::handleEvent(event);
 }
 
-void ScreenEntityInstanceSheet::Update() {
+void SceneEntityInstanceSheet::Update() {
 	if(instance) {
 		enabled = true;	
 		instanceProp->set(instance->getFileName());
@@ -2826,8 +3633,9 @@ void ScreenEntityInstanceSheet::Update() {
 	}
 }
 
-ScreenLabelSheet::ScreenLabelSheet() : PropSheet("SCREEN LABEL", "ScreenLabel") {
+SceneLabelSheet::SceneLabelSheet() : PropSheet("LABEL", "UILabel") {
 	label = NULL;
+    enabled = false;
 	
 	caption = new StringProp("Contents");
 	caption->addEventListener(this, Event::CHANGE_EVENT);
@@ -2837,6 +3645,10 @@ ScreenLabelSheet::ScreenLabelSheet() : PropSheet("SCREEN LABEL", "ScreenLabel") 
 	size->addEventListener(this, Event::CHANGE_EVENT);
 	addProp(size);	
 
+    actualHeight = new NumberProp("Actual height");
+	actualHeight->addEventListener(this, Event::CHANGE_EVENT);
+	addProp(actualHeight);
+
 	font = new ComboProp("Font");
 	font->addEventListener(this, Event::CHANGE_EVENT);
 	addProp(font);	
@@ -2845,15 +3657,13 @@ ScreenLabelSheet::ScreenLabelSheet() : PropSheet("SCREEN LABEL", "ScreenLabel") 
 	enableAA = new BoolProp("Antialias");
 	enableAA->addEventListener(this, Event::CHANGE_EVENT);
 	addProp(enableAA);	
-
-	lastSize = -1;
 	
 	propHeight = 160;
 	
 	refreshFonts();
 }
 
-void ScreenLabelSheet::refreshFonts() {
+void SceneLabelSheet::refreshFonts() {
 	
 	FontManager *fontManager = CoreServices::getInstance()->getFontManager();
 	
@@ -2868,11 +3678,36 @@ void ScreenLabelSheet::refreshFonts() {
 
 }
 
-ScreenLabelSheet::~ScreenLabelSheet() {
+void SceneLabelSheet::setSceneLabel(SceneLabel *label) {
+    this->label = label;
+    
+	if(label) {
+		enabled = true;
+        caption->set(label->getText());
+        enableAA->set(label->getLabel()->getAntialiasMode() == Label::ANTIALIAS_FULL);
+        size->set(label->getLabel()->getSize());
+        actualHeight->set(label->getLabelActualHeight());
+        
+        refreshFonts();
+        
+        for(int i=0; i < font->comboEntry->getNumItems(); i++) {
+            String comboFont = font->comboEntry->getItemAtIndex(i)->label;
+            
+            if(comboFont == label->getLabel()->getFont()->getFontName()) {
+                font->set(i);
+            }
+        }
+        
+	} else {
+		enabled = false;
+	}
+}
+
+SceneLabelSheet::~SceneLabelSheet() {
 
 }
 
-void ScreenLabelSheet::handleEvent(Event *event) {
+void SceneLabelSheet::handleEvent(Event *event) {
 	if(!label)
 		return;
 
@@ -2885,8 +3720,7 @@ void ScreenLabelSheet::handleEvent(Event *event) {
 		String fontName = font->comboEntry->getSelectedItem()->label;
 		Font *font = CoreServices::getInstance()->getFontManager()->getFontByName(fontName);
 		label->getLabel()->setFont(font);
-		label->setText(caption->get());		
-		lastFont = fontName;
+		label->setText(caption->get());
 		dispatchEvent(new Event(), Event::CHANGE_EVENT);
 	}
 
@@ -2895,11 +3729,14 @@ void ScreenLabelSheet::handleEvent(Event *event) {
 		int newSize= size->get();
 		if(newSize < 4)
 			newSize = 4;
-		
-		lastSize = newSize;	
 					
 		label->getLabel()->setSize(newSize);
 		label->setText(caption->get());		
+		dispatchEvent(new Event(), Event::CHANGE_EVENT);
+	}
+
+    if(event->getDispatcher() == actualHeight) {
+		label->setLabelActualHeight(actualHeight->get());
 		dispatchEvent(new Event(), Event::CHANGE_EVENT);
 	}
 
@@ -2917,35 +3754,205 @@ void ScreenLabelSheet::handleEvent(Event *event) {
 	PropSheet::handleEvent(event);
 }
 
-void ScreenLabelSheet::Update() {
-	if(label) {
-		enabled = true;		
-		if(label != lastLabel) {
-			lastLabel = label;
-	
-		caption->set(label->getText());		
-		enableAA->set(label->getLabel()->getAntialiasMode() == Label::ANTIALIAS_FULL);
-		size->set(label->getLabel()->getSize());
-		
-		for(int i=0; i < font->comboEntry->getNumItems(); i++) {
-			String comboFont = font->comboEntry->getItemAtIndex(i)->label;
-			
-			if(comboFont == label->getLabel()->getFont()->getFontName()) {
-				if(comboFont != lastFont) {
-					font->set(i);
-					lastFont = comboFont;
-				}
-			}
-		}
-
-		}
-	} else {
-		enabled = false;
-	}
+LayerSheet::LayerSheet() : PropSheet("VISIBILITY LAYERS", "layers") {
+    
+    
+    addLayerProp = new ButtonProp("Add new layer");
+    addProp(addLayerProp);
+    addLayerProp->getButton()->addEventListener(this, UIEvent::CLICK_EVENT);
+    
+    instance = NULL;
+    layerRemoveIndex = -1;
 }
 
-SoundSheet::SoundSheet() : PropSheet("SCREEN SOUND", "Sound") {
+void LayerSheet::setFromEntity() {
+    if(!instance) {
+        return;
+    }
+    
+	for(int i=0; i < props.size(); i++) {
+		contents->removeChild(props[i]);
+		props[i]->removeAllHandlersForListener(this);
+        if(props[i] != addLayerProp) {
+            delete props[i];
+        }
+	}
+	props.clear();
+    
+    for(int i=0; i < instance->getNumLayers(); i++) {
+        SceneEntityInstanceLayer *layer = instance->getLayerAtIndex(i);
+        LayerProp *newProp = new LayerProp(this->instance, layer);
+        newProp->addEventListener(this, Event::REMOVE_EVENT);
+        addProp(newProp);
+    }
+    
+    addProp(addLayerProp);
+}
+
+LayerSheet::~LayerSheet() {
+    
+}
+
+void LayerSheet::Update() {
+    if(layerRemoveIndex != -1) {
+        
+        SceneEntityInstanceLayer *layer = instance->getLayerAtIndex(layerRemoveIndex);
+        if(layer) {
+            std::vector<Entity*> entities = instance->getEntitiesByLayerID(layer->layerID, true);
+            for(int i=0; i < entities.size(); i++) {
+                entities[i]->layerID = 0;
+                entities[i]->visible = true;
+            }
+            instance->removeLayer(layer);
+        }
+        setFromEntity();
+        layerRemoveIndex = -1;
+    }
+}
+
+void LayerSheet::setEntityInstance(SceneEntityInstance *instance) {
+    this->instance = instance;
+    setFromEntity();
+}
+
+void LayerSheet::handleEvent(Event *event) {
+    
+    if(!instance) {
+        return;
+    }
+    
+    for(int i=0; i < props.size(); i++) {
+        if(props[i] == event->getDispatcher()) {
+            layerRemoveIndex = i;
+        }
+    }
+    
+    if(event->getDispatcher() == addLayerProp->getButton()) {
+        instance->createNewLayer("newLayer");
+        setFromEntity();
+    }
+    
+    PropSheet::handleEvent(event);
+}
+
+LinkedMaterialsSheet::LinkedMaterialsSheet() : PropSheet("LINKED RESOURCE POOLS", "linked_materials") {
+    
+    addMaterialProp = new ButtonProp("Link resource pool");
+    addProp(addMaterialProp);
+    addMaterialProp->getButton()->addEventListener(this, UIEvent::CLICK_EVENT);
+    
+    poolRemoveIndex = -1;
+}
+
+LinkedMaterialsSheet::~LinkedMaterialsSheet() {
+    
+}
+
+void LinkedMaterialsSheet::Update() {
+    if(poolRemoveIndex > -1) {
+        if(instance) {
+            instance->unlinkResourcePool(instance->getLinkedResourcePoolAtIndex(poolRemoveIndex));
+            updateMaterials();
+        }
+        poolRemoveIndex = -1;
+    }
+}
+
+void LinkedMaterialsSheet::handleEvent(Event *event) {
+    
+    if(!instance) {
+        return;
+    }
+    
+    for(int i=0; i < props.size(); i++) {
+        if(props[i] == event->getDispatcher()) {
+            poolRemoveIndex = i;
+        }
+    }
+    
+    if(event->getDispatcher() == addMaterialProp->getButton()) {
+		globalFrame->assetBrowser->addEventListener(this, UIEvent::OK_EVENT);
+		std::vector<String> extensions;
+		extensions.push_back("mat");
+		extensions.push_back("sprites");
+		globalFrame->showAssetBrowser(extensions);
+        
+    } else if(event->getDispatcher() == globalFrame->assetBrowser) {
+		String resourcePath = globalFrame->assetBrowser->getSelectedAssetPath();
+
+		String fullResourcePath = globalFrame->assetBrowser->getFullSelectedAssetPath();
+		        
+        globalFrame->assetBrowser->removeAllHandlersForListener(this);
+        globalFrame->hideModal();
+        
+        ResourcePool *newPool = CoreServices::getInstance()->getResourceManager()->getResourcePoolByName(resourcePath);
+        
+        if(!newPool) {
+            String extension = resourcePath.substr(resourcePath.find_last_of(".")+1, resourcePath.length());
+
+            if(extension == "mat") {
+                
+                newPool = new ResourcePool(resourcePath,  CoreServices::getInstance()->getResourceManager()->getGlobalPool());
+                newPool->reloadResourcesOnModify = true;
+                newPool->deleteOnUnsubscribe = true;
+                
+                CoreServices::getInstance()->getMaterialManager()->loadMaterialLibraryIntoPool(newPool, fullResourcePath);
+            } else if( extension == "sprites") {
+                SpriteSet *spriteSet = new SpriteSet(resourcePath,  CoreServices::getInstance()->getResourceManager()->getGlobalPool());
+                spriteSet->reloadResourcesOnModify = true;
+                spriteSet->deleteOnUnsubscribe = true;
+                newPool = spriteSet;
+            }
+            
+            CoreServices::getInstance()->getResourceManager()->addResourcePool(newPool);
+            
+        }
+        
+        instance->linkResourcePool(newPool);
+        updateMaterials();
+    }
+    PropSheet::handleEvent(event);
+}
+
+void LinkedMaterialsSheet::updateMaterials() {
+    if(!instance) {
+        return;
+    }
+    
+	for(int i=0; i < props.size(); i++) {
+		contents->removeChild(props[i]);
+		props[i]->removeAllHandlersForListener(this);
+        if(props[i] != addMaterialProp) {
+            delete props[i];
+        }
+	}
+	props.clear();
+    
+    for(int i=0; i < instance->getNumLinkedResourePools(); i++) {
+        ResourcePool *pool = instance->getLinkedResourcePoolAtIndex(i);
+        RemovableStringProp *newProp = new RemovableStringProp(pool->getName());
+        newProp->addEventListener(this, Event::REMOVE_EVENT);
+        addProp(newProp);
+    }
+    
+    addProp(addMaterialProp);
+}
+
+
+void LinkedMaterialsSheet::setEntityInstance(SceneEntityInstance *instance) {
+    this->instance = instance;
+    if(instance) {
+        enabled = true;
+        updateMaterials();
+    } else {
+        enabled = false;
+    }
+}
+
+
+SoundSheet::SoundSheet() : PropSheet("SOUND", "sound") {
 	sound = NULL;
+    enabled = false;
 	
 	soundProp = new SoundProp("Sound file");
 	soundProp->addEventListener(this, Event::CHANGE_EVENT);
@@ -2954,26 +3961,24 @@ SoundSheet::SoundSheet() : PropSheet("SCREEN SOUND", "Sound") {
 	referenceDistance = new NumberProp("Reference dist");
 	referenceDistance->addEventListener(this, Event::CHANGE_EVENT);
 	addProp(referenceDistance);
-
+    
 	maxDistance = new NumberProp("Max dist");
 	maxDistance->addEventListener(this, Event::CHANGE_EVENT);
 	addProp(maxDistance);
+    
+    loopOnLoad = new BoolProp("Loop on load");
+    loopOnLoad->addEventListener(this, Event::CHANGE_EVENT);
+    addProp(loopOnLoad);
 
-	volume = new NumberProp("Volume");
+	volume = new SliderProp("Volume", 0.0, 1.0);
 	volume->addEventListener(this, Event::CHANGE_EVENT);
 	addProp(volume);
 	
-	pitch = new NumberProp("Pitch");
+	pitch = new SliderProp("Pitch", 0.0, 2.0);
 	pitch->addEventListener(this, Event::CHANGE_EVENT);
 	addProp(pitch);
-	
-	lastReferenceDistance = 0.0;
-	lastMaxDistance = 0.0;
-	lastVolume = 0.0;
-	lastPitch = 0.0;
-	lastSoundPath = "";
-	
-	propHeight = 230;
+		
+	propHeight = 210;
 }
 
 SoundSheet::~SoundSheet() {
@@ -2985,65 +3990,49 @@ void SoundSheet::handleEvent(Event *event) {
 		return;
 
 	if(event->getDispatcher() == referenceDistance  && event->getEventCode() == Event::CHANGE_EVENT) {
-		lastReferenceDistance = referenceDistance->get();
-		sound->getSound()->setReferenceDistance(lastReferenceDistance);
+		sound->getSound()->setReferenceDistance(referenceDistance->get());
 		dispatchEvent(new Event(), Event::CHANGE_EVENT);
 	}
 
 	if(event->getDispatcher() == maxDistance  && event->getEventCode() == Event::CHANGE_EVENT) {
-		lastMaxDistance = maxDistance->get();
-		sound->getSound()->setMaxDistance(lastMaxDistance);
+		sound->getSound()->setMaxDistance(maxDistance->get());
 		dispatchEvent(new Event(), Event::CHANGE_EVENT);
 	}
 
 	if(event->getDispatcher() == volume  && event->getEventCode() == Event::CHANGE_EVENT) {
-		lastVolume = volume->get();
-		sound->getSound()->setVolume(lastVolume);
+		sound->getSound()->setVolume(volume->get());
 	}
 
 	if(event->getDispatcher() == pitch  && event->getEventCode() == Event::CHANGE_EVENT) {
-		lastPitch = pitch->get();
-		sound->getSound()->setPitch(lastPitch);
+		sound->getSound()->setPitch(pitch->get());
+        soundProp->previewSound->setPitch(pitch->get());
 	}
 
 	if(event->getDispatcher() == soundProp  && event->getEventCode() == Event::CHANGE_EVENT) {
-		lastSoundPath = soundProp->get();
-		sound->getSound()->loadFile(lastSoundPath);
+		sound->getSound()->loadFile(soundProp->get(), false);
 	}
+    
+    if(event->getDispatcher() == loopOnLoad && event->getEventCode() == Event::CHANGE_EVENT) {
+        sound->setLoopOnLoad(loopOnLoad->get());
+    }
 
 
 	PropSheet::handleEvent(event);
 }
 
-void SoundSheet::Update() {
+void SoundSheet::setSound(SceneSound *sound) {
+    this->sound = sound;
+
 	if(sound) {
 		enabled = true;	
-		
-		if(sound->getSound()->getFileName() != lastSoundPath) {
-			lastSoundPath = sound->getSound()->getFileName();
-			soundProp->set(sound->getSound()->getFileName());
-		}
-		
-		if(sound->getSound()->getReferenceDistance() != lastReferenceDistance) {
-			lastReferenceDistance = sound->getSound()->getReferenceDistance();
-			referenceDistance->set(sound->getSound()->getReferenceDistance());
-		}
 
-		if(sound->getSound()->getMaxDistance() != lastMaxDistance) {
-			lastMaxDistance = sound->getSound()->getMaxDistance();
-			maxDistance->set(sound->getSound()->getMaxDistance());
-		}
-
-		if(sound->getSound()->getVolume() != lastVolume) {
-			lastVolume = sound->getSound()->getVolume();
-			volume->set(sound->getSound()->getVolume());
-		}
-
-		if(sound->getSound()->getPitch() != lastPitch) {
-			lastPitch = sound->getSound()->getPitch();
-			pitch->set(sound->getSound()->getPitch());
-		}
-		
+        soundProp->set(sound->getSound()->getFileName());
+        referenceDistance->set(sound->getSound()->getReferenceDistance());
+        maxDistance->set(sound->getSound()->getMaxDistance());
+        volume->set(sound->getSound()->getVolume());
+        pitch->set(sound->getSound()->getPitch());
+        soundProp->previewSound->setPitch(sound->getSound()->getPitch());
+        loopOnLoad->set(sound->getLoopOnLoad());
 
 	} else {
 		enabled = false;

@@ -50,34 +50,36 @@ class PolycodeProjectBrowserEvent : public Event {
 };
 
 class PolycodeProjectBrowser : public UIElement {
-public:
-	PolycodeProjectBrowser();
-	~PolycodeProjectBrowser();
-	
-	void Resize(Number width, Number height);
-	void addProject(PolycodeProject *project);
-	void removeProject(PolycodeProject *project);
-	
-	UITree *nodeHasName(UITree *node, String name);
-	bool listHasFileEntry(vector<OSFileEntry> files, OSFileEntry fileEntry);
-	
-	void refreshProject(PolycodeProject *project);
-	
-	void handleEvent(Event *event);
-	
-	void parseFolderIntoNode(UITree *node, String spath, PolycodeProject *parentProject);
-	
-	
-	
-	BrowserUserData *getSelectedData() { return selectedData; }
-	
-	UITreeContainer *treeContainer;
+	public:
+		PolycodeProjectBrowser(PolycodeProject *project);
+		~PolycodeProjectBrowser();
+		
+		void Resize(Number width, Number height);
+		
+		ObjectEntry *getBrowserConfig();
+		void applyBrowserConfig(ObjectEntry *entry);
+		
+		UITree *nodeHasName(UITree *node, String name);
+		bool listHasFileEntry(vector<OSFileEntry> files, OSFileEntry fileEntry);
+		
+        static String getIconForExtension(String extension);
+    
+		void Refresh();
+		
+		void handleEvent(Event *event);
+		
+		void parseFolderIntoNode(UITree *node, String spath);
+		
+		BrowserUserData *getSelectedData() { return selectedData; }
+		
+		UITreeContainer *treeContainer;
 			
 protected:
+		PolycodeProject *project;
 
-		ScreenShape *headerBg;
-	
-		UIMenu *contextMenu;
-	
+		void applyOpenNodeToTree(UITree* treeNode, ObjectEntry *nodeEntry);
+		
+		UIRect *headerBg;	
+		UIMenu *contextMenu;	
 		BrowserUserData *selectedData;
 };	

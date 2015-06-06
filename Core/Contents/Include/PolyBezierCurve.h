@@ -19,16 +19,15 @@
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
  */
+ 
 
 
 #pragma once 
 
 #include "PolyGlobals.h"
 #include "PolyVector3.h"
+#include "PolyVector2.h"
 #include <vector>
-
-
-#define BUFFER_CACHE_PRECISION 100
 
 namespace Polycode {
 
@@ -142,12 +141,6 @@ namespace Polycode {
 		*/										
 		void addControlPoint2d(Number x, Number y);
 		
-		/**
-		* Returns the height of the curve at a specified point on the curve. Heights are cached into a buffer with a finite cache precision to speed up the curve usage in animation. If you need to quickly get 2D height out of a curve and you don't care about total precision, use this method.
-		* @param a Normalized (0-1) position along the curve.
-		* @return Height value at specified position.
-		*/												
-		Number getHeightAt(Number a);
 
 		/**
 		* Returns the 3d point of the curve at a specified point on the curve.
@@ -162,34 +155,59 @@ namespace Polycode {
 		* @return 3d point at specified position.
 		*/																				
 		Vector3 getPointBetween(Number a, BezierPoint *bp1, BezierPoint *bp2);
-		
+
+        /**
+         * Removes all curve control points.
+         */
 		void clearControlPoints();
-		
-		/** 
-		* Rebuilds the height cache buffers for 2d height curves.
-		*/	
-		void rebuildBuffers();
+        
+        /**
+         * Returns the Y-axis value of the curve at specified X-axis value.
+         */
+        Number getYValueAtX(Number x);
+
+        /**
+         * Returns the normalized curve position value at specified X-axis value.
+         */
+		Number getTValueAtX(Number x);
 		
 		/**
-		* Removes (and deletes!) a gives point by pointer
+		* Removes (and deletes!) a given point by pointer.
 		*/
 		void removePoint(BezierPoint *point);
-
-		Number heightBuffer[BUFFER_CACHE_PRECISION];
-
+        
+        void setHeightCacheResolution(Number resolution);
+        void rebuildHeightCache();
+        
+        /**
+        * The point after which new control points should be added. If NULL, new control points are added to the end of the curve.
+        */
 		BezierPoint *insertPoint;
-
-		std::vector<BezierPoint*> controlPoints;
-		std::vector<Number> distances;
 		
-		void recalculateDistances();		
+        /**
+         * Accuracy value for X-axis curve evaluation. The higher this number, the faster but less accurate X-axis curve evaluation is.
+            Defaults to 0.01
+         */
+        Number evaluationAccuracy;
+        
+        void recalculateDistances();
+        
+        static bool cacheHeightValues;
+        static unsigned int defaultHeightCacheResolution;
 		
 		protected:
+        
+            unsigned int heightCacheResolution;
+            std::vector<BezierPoint*> controlPoints;
+            std::vector<Number> distances;
+        
+            std::vector<Number> heightCache;
 		
-			bool buffersDirty;
-		
-
-	
+            Number minX;
+            Number maxX;
+            Number midX;
+        
+            bool distancesDirty;
 			
 	};
 

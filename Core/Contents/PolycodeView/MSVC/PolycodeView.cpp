@@ -97,16 +97,25 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			core->handleMouseUp(CoreInput::MOUSE_BUTTON2, lParam,wParam);
 	break;
 
-#ifndef NO_TOUCH_API
-	case WM_TOUCH:
-		if(core) {
-			if(core->isMultiTouchEnabled()) {
-				core->handleTouchEvent(lParam, wParam);
+#ifndef NO_TOUCH_API 
+	#ifdef NO_PEN_API
+		case WM_TOUCH:
+			if(core) {
+				if(core->isMultiTouchEnabled()) {
+					core->handleTouchEvent(lParam, wParam);
+				}
 			}
-		}
-	break;
+		break;
+	#else
+		case WM_POINTERUPDATE:
+		case WM_POINTERUP:
+		case WM_POINTERDOWN:
+			if (core)
+				core->handlePointerUpdate(lParam, wParam);
+		break;
+	#endif
 #endif
-
+	
 	case WM_MBUTTONDOWN:
 		if(core)
 			core->handleMouseDown(CoreInput::MOUSE_BUTTON3, lParam,wParam);
@@ -116,6 +125,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			core->handleMouseUp(CoreInput::MOUSE_BUTTON3, lParam,wParam);
 	break;
 	case WM_KEYDOWN:
+	case WM_SYSKEYDOWN:
 		if(core) {
 				wchar_t unicodeChar = 0;
 				MSG m;
@@ -133,6 +143,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		}
 	break;
 	case WM_KEYUP:
+	case WM_SYSKEYUP:
 		if(core)
 			core->handleKeyUp(lParam,wParam);
 	break;
@@ -158,7 +169,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 PolycodeView::PolycodeView(HINSTANCE hInstance, int nCmdShow, LPCTSTR windowTitle, bool resizable, bool showDebugConsole) : PolycodeViewBase() {
 
-WNDCLASSEX wcex;
+	/*
+	typedef BOOL(WINAPI *SetProcessDPIAwarePtr)(VOID);
+	SetProcessDPIAwarePtr set_process_dpi_aware_func = GetProcAddress(GetModuleHandleA("user32.dll"), "SetProcessDPIAware");
+	if (set_process_dpi_aware_func) {
+		set_process_dpi_aware_func();
+	}
+	*/
+	WNDCLASSEX wcex;
 
 	wcex.cbSize = sizeof(WNDCLASSEX);
 	wcex.style			= CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
@@ -175,10 +193,12 @@ WNDCLASSEX wcex;
 
 	RegisterClassEx(&wcex);
 
+	this->resizable = resizable;
+
 	if(resizable) {
-		hwnd = CreateWindowEx(WS_EX_APPWINDOW, L"POLYCODEAPPLICATION", windowTitle, WS_OVERLAPPEDWINDOW|WS_SYSMENU, 0, 0, 640, 480, NULL, NULL, hInstance, NULL);
+		hwnd = CreateWindowEx(WS_EX_APPWINDOW, L"POLYCODEAPPLICATION", windowTitle, WS_OVERLAPPEDWINDOW | WS_SYSMENU, 0, 0, 640, 480, NULL, NULL, hInstance, NULL);
 	} else {
-		hwnd = CreateWindowEx(WS_EX_APPWINDOW, L"POLYCODEAPPLICATION", windowTitle, WS_OVERLAPPED|WS_SYSMENU, 0, 0, 640, 480, NULL, NULL, hInstance, NULL);
+		hwnd = CreateWindowEx(WS_EX_APPWINDOW, L"POLYCODEAPPLICATION", windowTitle, WS_CAPTION | WS_POPUP | WS_SYSMENU, 0, 0, 640, 480, NULL, NULL, hInstance, NULL);
 	}
 
   windowData = (void*)&hwnd;

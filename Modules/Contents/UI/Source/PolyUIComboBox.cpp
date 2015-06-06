@@ -25,6 +25,7 @@
 #include "PolyLabel.h"
 #include "PolyCoreServices.h"
 #include "PolyConfig.h"
+#include "PolyRenderer.h"
 
 using namespace Polycode;
 
@@ -43,7 +44,8 @@ UIComboBox::UIComboBox(UIGlobalMenu *globalMenu, Number comboWidth) : UIElement(
 
 	selectedIndex = -1;
 
-	Config *conf = CoreServices::getInstance()->getConfig();	
+	Config *conf = CoreServices::getInstance()->getConfig();
+    Number uiScale = conf->getNumericValue("Polycode", "uiScale");
 	
 	String fontName = conf->getStringValue("Polycode", "uiComboBoxFont");
 	int fontSize = conf->getNumericValue("Polycode", "uiComboBoxFontSize");	
@@ -61,7 +63,9 @@ UIComboBox::UIComboBox(UIGlobalMenu *globalMenu, Number comboWidth) : UIElement(
 	dropDownX = conf->getNumericValue("Polycode", "uiComboBoxDropX");
 	dropDownY = conf->getNumericValue("Polycode", "uiComboBoxDropY");
 		
-	dropDownImage = new ScreenImage(dropDownImageFile);
+	dropDownImage = new UIImage(dropDownImageFile);
+    dropDownImage->Resize(dropDownImage->getWidth() / uiScale, dropDownImage->getHeight() / uiScale);
+    
 	dropDownImage->setPosition(comboWidth - dropDownImage->getWidth() - dropDownX,dropDownY);
 	
 	this->comboHeight = conf->getNumericValue("Polycode", "uiComboBoxHeight");
@@ -73,9 +77,9 @@ UIComboBox::UIComboBox(UIGlobalMenu *globalMenu, Number comboWidth) : UIElement(
 	addChild(bgBox);
 	addChild(dropDownImage);
 	
-	selectedLabel = new ScreenLabel("<None>", fontSize, fontName);
-	selectedLabel->positionAtBaseline = false;
-	selectedLabel->setPosition(paddingX, floor(((dropDownImage->getHeight()/2.0) - selectedLabel->getLabel()->getTextHeight()/2.0) + paddingY));
+	selectedLabel = new UILabel("<None>", fontSize, fontName);
+    selectedLabel->setBlendingMode(Renderer::BLEND_MODE_NORMAL);
+	selectedLabel->setPosition(paddingX, paddingY);
 	addChild(selectedLabel);
 	
 	selectedLabel->color.setColorHexFromString(conf->getStringValue("Polycode", "uiDefaultFontColor"));
@@ -92,21 +96,21 @@ UIComboBox::UIComboBox(UIGlobalMenu *globalMenu, Number comboWidth) : UIElement(
 	selectedOffset = 0;
 
 	dropDownImage->addEventListener(this, InputEvent::EVENT_MOUSEDOWN);	
+	dropDownImage->setAnchorPoint(-1.0, -1.0, 0.0);
 	dropDownImage->processInputEvents = true;	
 	bgBox->addEventListener(this, InputEvent::EVENT_MOUSEDOWN);	
 	bgBox->processInputEvents = true;	
 				
-	this->width = comboWidth;
-	this->height = comboHeight;
+	setWidth(comboWidth);
+	setHeight(comboHeight);
 }
 
 void UIComboBox::Resize(Number width, Number height) {
 	this->comboWidth = width;
 	bgBox->resizeBox(width, comboHeight);
-	this->width = width;
-	this->height = height;	
+	setWidth(width);
+	setHeight(height);	
 	matrixDirty = true;	
-	setHitbox(width,height);
 	dropDownImage->setPosition(comboWidth - dropDownImage->getWidth() - dropDownX,dropDownY);	
 }
 
@@ -145,8 +149,8 @@ UIComboBoxItem *UIComboBox::getSelectedItem() {
 }
 
 void UIComboBox::toggleDropDown() {
-	Vector2 screenPos = this->getScreenPosition();
-	dropDownMenu = globalMenu->showMenu(screenPos.x, screenPos.y, width);
+	Vector2 screenPos = this->getScreenPositionForMainCamera();
+	dropDownMenu = globalMenu->showMenu(screenPos.x, screenPos.y, getWidth());
 	
 	for(int i=0; i < items.size(); i++) {
 		dropDownMenu->addOption(items[i]->label, String::IntToString(i));
@@ -159,11 +163,13 @@ int UIComboBox::getSelectedIndex() {
 	return selectedIndex;
 }
 
-void UIComboBox::setSelectedIndex(unsigned int newIndex) {
+void UIComboBox::setSelectedIndex(unsigned int newIndex, bool suppressChangeEvent) {
 	if(newIndex < items.size()) {
 		selectedIndex = newIndex;				
-		selectedLabel->setText(items[selectedIndex]->label);		
-		dispatchEvent(new UIEvent(), UIEvent::CHANGE_EVENT);
+		selectedLabel->setText(items[selectedIndex]->label);
+		if(!suppressChangeEvent) {
+			dispatchEvent(new UIEvent(), UIEvent::CHANGE_EVENT);
+		}
 	}
 }
 

@@ -22,10 +22,10 @@
 
 #pragma once
 #include "PolyGlobals.h"
-#include "PolyScreenImage.h"
-#include "PolyScreenLabel.h"
-#include "PolyScreenShape.h"
-#include "PolyScreenEntity.h"
+#include "PolySceneImage.h"
+#include "PolySceneLabel.h"
+#include "PolyScenePrimitive.h"
+#include "PolyEntity.h"
 #include "PolyUIEvent.h"
 #include "PolyUITextInput.h"
 #include "PolyUIWindow.h"
@@ -40,7 +40,7 @@ namespace Polycode {
 	class _PolyExport UIColorPicker : public UIWindow {
 		public:
 			UIColorPicker();
-			~UIColorPicker();
+			virtual ~UIColorPicker();
 			
 			void updateSelectedColor(bool updateTextFields=true, bool updateHue = true, bool updateSV=true);
 			void setHue(Number hueNum);			
@@ -83,17 +83,17 @@ namespace Polycode {
 			UITextInput *bTextInput;
 			UITextInput *aTextInput;						
 									
-			ScreenImage *mainFrame;
-			ScreenImage *mainBg;			
-			ScreenImage *hueFrame;
-			ScreenImage *hueSelector;
-			ScreenImage *mainSelector;	
+			UIImage *mainFrame;
+			UIImage *mainBg;			
+			UIImage *hueFrame;
+			UIImage *hueSelector;
+			UIImage *mainSelector;	
 			
 			UIHSlider *alphaSlider;
 			
-			ScreenShape *mainColorRect;
+			SceneMesh *mainColorRect;
 			
-			vector<ScreenLabel *> junkLabels; // Kept only to delete
+			vector<UILabel *> junkLabels; // Kept only to delete
 	};
 
 	class _PolyExport UIColorBox : public UIElement {
@@ -116,8 +116,8 @@ namespace Polycode {
 			Color selectedColor;
 				
 			UIBox *frameImage;
-			ScreenShape *bgImage;
-			ScreenShape *colorShape;			
+			UIRect *bgImage;
+			UIRect *colorShape;			
 		
 	};
 }

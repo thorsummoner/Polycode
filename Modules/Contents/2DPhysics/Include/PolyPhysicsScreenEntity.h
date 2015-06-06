@@ -27,25 +27,25 @@ THE SOFTWARE.
 
 namespace Polycode {
 
-	class ScreenEntity;
+	class Entity;
 
 	/**
 	* A 2D Physics enabled screen entity. 
 	*/	
-	class _PolyExport PhysicsScreenEntity {
+	class _PolyExport PhysicsScene2DEntity {
 		public:
         
-            PhysicsScreenEntity() { collisionOnly = false; }
+            PhysicsScene2DEntity() { collisionOnly = false; }
         
-			PhysicsScreenEntity(ScreenEntity *entity, b2World *world, Number worldScale, int entType, bool isStatic, Number friction, Number density, Number restitution, bool isSensor, bool fixedRotation, int groupIndex = 0);
-			virtual ~PhysicsScreenEntity();
+			PhysicsScene2DEntity(Entity *entity, b2World *world, Number worldScale, int entType, bool isStatic, Number friction, Number density, Number restitution, bool isSensor, bool fixedRotation, int groupIndex = 0);
+			virtual ~PhysicsScene2DEntity();
 
 			virtual void Update();
 			
 			/**
 			* Returns the screen entity associated with this physics entity.
 			*/
-			ScreenEntity *getScreenEntity();
+			Entity *getEntity();
 			
 			/**
 			* Applies torque to the physics entity		
@@ -112,6 +112,9 @@ namespace Polycode {
 			 * Gets the last fixture selected (automatically set to last added on creation)
 			 */
 			b2Fixture* getFixture();
+        
+            bool getFixedRotation() const;
+            void setFixedRotation(bool val);
 
 			/**
 			* Rectangular physics entity
@@ -147,8 +150,11 @@ namespace Polycode {
 
 		protected:
         
-			Number worldScale;        
-			ScreenEntity *screenEntity;   		
+            bool fixedRotation;
+			Number worldScale;
+			Entity *entity;
 	};
+	
+	typedef PhysicsScene2DEntity PhysicsScreenEntity;
 
 }

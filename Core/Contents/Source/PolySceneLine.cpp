@@ -22,9 +22,84 @@
 
 #include "PolySceneLine.h"
 #include "PolyRenderer.h"
-#include "PolyPolygon.h"
 
 using namespace Polycode;
+
+using std::min;
+using std::max;
+
+SceneCurve::SceneCurve() : SceneMesh(Mesh::LINE_STRIP_MESH) {
+    curveResolution = 256;
+    renderCurve = true;
+    curve = new BezierCurve();
+}
+
+SceneCurve::SceneCurve(BezierCurve *curve) : SceneMesh(Mesh::LINE_STRIP_MESH) {
+    curveResolution = 256;
+    renderCurve = true;
+    this->curve = curve;
+}
+
+SceneCurve *SceneCurve::SceneCurveWithCurve(BezierCurve *curve) {
+    return new SceneCurve(curve);
+}
+
+Vector3 SceneCurve::getWorldPointAt(Number t) {
+    return getConcatenatedMatrix() * curve->getPointAt(t);
+}
+
+Entity *SceneCurve::Clone(bool deepClone, bool ignoreEditorOnly) const {
+	SceneCurve *newCurve = new SceneCurve();
+	applyClone(newCurve, deepClone, ignoreEditorOnly);
+	return newCurve;
+}
+
+void SceneCurve::applyClone(Entity *clone, bool deepClone, bool ignoreEditorOnly) const {
+    SceneMesh::applyClone(clone, deepClone, ignoreEditorOnly);
+    
+    SceneCurve *cloneCurve = (SceneCurve*)clone;
+    cloneCurve->renderCurve = renderCurve;
+    cloneCurve->curveResolution = curveResolution;
+    
+    for(int i=0; i < curve->getNumControlPoints(); i++) {
+        BezierPoint *pt = curve->getControlPoint(i);
+        cloneCurve->getCurve()->addControlPoint(
+            pt->p1.x, pt->p1.y, pt->p1.z,
+            pt->p2.x, pt->p2.y, pt->p2.z,
+            pt->p3.x, pt->p3.y, pt->p3.z);
+    }
+}
+
+
+SceneCurve::~SceneCurve() {
+    delete curve;
+}
+
+BezierCurve *SceneCurve::getCurve() {
+    return curve;
+}
+
+void SceneCurve::Update() {
+    mesh->clearMesh();
+    Vector3 bBox;
+    
+    if(renderCurve) {
+
+        Number step = (1.0 / ((Number)curveResolution));
+        
+        for(Number offset=0.0; offset <= 1.0; offset += step) {
+            Vector3 pt = curve->getPointAt(offset);
+            mesh->addVertexWithUV(pt.x, pt.y, pt.z, offset, 0.0);
+            
+            bBox.x = max(bBox.x,(Number)fabs(pt.x));
+            bBox.y = max(bBox.y,(Number)fabs(pt.y));
+            bBox.z = max(bBox.z,(Number)fabs(pt.z));
+
+        }
+    }
+    
+    setLocalBoundingBox(bBox * 2.0);
+}
 
 SceneLine::SceneLine(Vector3 start, Vector3 end) : SceneMesh(Mesh::LINE_MESH) {
 	this->ent1 = NULL;
@@ -32,10 +107,10 @@ SceneLine::SceneLine(Vector3 start, Vector3 end) : SceneMesh(Mesh::LINE_MESH) {
 	this->start = start;
 	this->end = end;	
 	initLine();
-	ignoreParentMatrix = true;
+	ignoreParentMatrix = false;
 }
 
-SceneLine::SceneLine(SceneEntity *ent1, SceneEntity *ent2) : SceneMesh(Mesh::LINE_MESH) {
+SceneLine::SceneLine(Entity *ent1, Entity *ent2) : SceneMesh(Mesh::LINE_MESH) {
 	this->ent1 = ent1;
 	this->ent2 = ent2;	
 	initLine();
@@ -43,12 +118,9 @@ SceneLine::SceneLine(SceneEntity *ent1, SceneEntity *ent2) : SceneMesh(Mesh::LIN
 
 }
 
-void SceneLine::initLine() { 
-	Polygon *poly = new Polygon();
-	poly->addVertex(0,0,0,0,0);
-	poly->addVertex(0,0,0,1,0);	
-	mesh->addPolygon(poly);
-	mesh->arrayDirtyMap[RenderDataArray::TEXCOORD_DATA_ARRAY] = true;		
+void SceneLine::initLine() {
+	mesh->addVertexWithUV(0,0,0,0,0);
+	mesh->addVertexWithUV(0,0,0,1,0);
 }
 
 SceneLine *SceneLine::SceneLineWithPositions(Vector3 start, Vector3 end) {
@@ -70,16 +142,20 @@ void SceneLine::Update(){
 
 	Vector3 v1;
 	Vector3 v2;
+
+    mesh->vertexPositionArray.data.clear();
 	
 	if(ent1 != NULL && ent2 != NULL) {
 		v1 = ent1->getConcatenatedMatrix().getPosition();
 		v2 = ent2->getConcatenatedMatrix().getPosition();
+        
+        mesh->addVertex(v1.x,v1.y,v1.z);
+        mesh->addVertex(v2.x,v2.y,v2.z);
 	} else {
 		v1 = start;
 		v2 = end;
+        mesh->addVertex(v1.x,v1.y*yAdjust,v1.z);
+        mesh->addVertex(v2.x,v2.y*yAdjust,v2.z);
+
 	}
-	
-	mesh->getPolygon(0)->getVertex(0)->set(v1.x,v1.y,v1.z);
-	mesh->getPolygon(0)->getVertex(1)->set(v2.x,v2.y,v2.z);
-	mesh->arrayDirtyMap[RenderDataArray::VERTEX_DATA_ARRAY] = true;	
 }

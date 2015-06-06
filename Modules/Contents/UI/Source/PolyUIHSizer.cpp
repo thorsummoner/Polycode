@@ -26,31 +26,35 @@
 #include "PolyInputEvent.h"
 #include "PolyCoreServices.h"
 #include "PolyCore.h"
+#include "PolyUIEvent.h"
 
 using namespace Polycode;
 
 UIHSizer::UIHSizer(Number width, Number height, Number mainWidth, bool leftSizer) : UIElement() {
 
-	this->width = width;
-	this->height = height;
+	minimumSize = 100;
+	proportionalResize = false;
+
+	setWidth(width);
+	setHeight(height);
 	this->leftSizer = leftSizer;
 	this->mainWidth = mainWidth;
 	
-	separatorBgShape = new ScreenShape(ScreenShape::SHAPE_RECT, 1,height);
-	separatorBgShape->setPositionMode(ScreenEntity::POSITION_TOPLEFT);
+	separatorBgShape = new UIRect(1,height);
+	separatorBgShape->setAnchorPoint(-1.0, -1.0, 0.0);
 	separatorBgShape->setColor(0.0, 0.0, 0.0, 1.0);	
 	addChild(separatorBgShape);
 	
 
-	childElements = new ScreenEntity();
+	childElements = new Entity();
 	childElements->processInputEvents = true;
 	addChild(childElements);
 	
 	firstElement = NULL;
 	secondElement = NULL;
 	
-	separatorHitShape = new ScreenShape(ScreenShape::SHAPE_RECT, 8,height);
-	separatorHitShape->setPositionMode(ScreenEntity::POSITION_TOPLEFT);
+	separatorHitShape = new UIRect(8,height);
+	separatorHitShape->setAnchorPoint(-1.0, -1.0, 0.0);
 	separatorHitShape->setColor(1.0, 0.0, 0.0, 0.5);	
 	separatorHitShape->blockMouseInput = true;	
 	addChild(separatorHitShape);
@@ -75,8 +79,8 @@ UIHSizer::UIHSizer(Number width, Number height, Number mainWidth, bool leftSizer
 
 UIHSizer::~UIHSizer() {
 	coreInput->removeAllHandlersForListener(this);
-	if (ownsChildren)
-		childElements->ownsChildren = true;
+
+    childElements->ownsChildren = false;
 	if(!ownsChildren) {
 		delete childElements;	
 		delete separatorBgShape;
@@ -113,9 +117,9 @@ void UIHSizer::handleEvent(Event *event) {
 			case InputEvent::EVENT_MOUSEMOVE:
 				if(resizing == true) {
 					if(leftSizer) {
-						setMainWidth(baseMainWidth + (inputEvent->mousePosition.x-baseMouseX));
+						setMainWidthWithMinimum(baseMainWidth + (inputEvent->mousePosition.x-baseMouseX));
 					} else {
-						setMainWidth(baseMainWidth - (inputEvent->mousePosition.x-baseMouseX));
+						setMainWidthWithMinimum(baseMainWidth - (inputEvent->mousePosition.x-baseMouseX));
 					}
 				} else {
 					baseMouseX = inputEvent->mousePosition.x;				
@@ -125,9 +129,18 @@ void UIHSizer::handleEvent(Event *event) {
 	}
 }
 
+void UIHSizer::setProportionalResize(bool val) {
+	proportionalResize = val;
+}
+
 void UIHSizer::Resize(Number width, Number height) {
-	this->width = width;
-	this->height = height;
+
+	if(proportionalResize) {
+		mainWidth = mainWidth * (width/getWidth());
+	}
+
+	setWidth(width);
+	setHeight(height);
 	matrixDirty = true;
 	updateSizer();
 	UIElement::Resize(width, height);	
@@ -137,9 +150,24 @@ Number UIHSizer::getMainWidth() {
 	return mainWidth;
 }
 
+void UIHSizer::setMainWidthWithMinimum(Number newWidth) {
+	if(newWidth < minimumSize) {
+		newWidth = minimumSize;
+	}
+	if(newWidth > getWidth()-minimumSize) {
+		newWidth = getWidth()-minimumSize;
+	}
+	setMainWidth(newWidth);
+}
+
 void UIHSizer::setMainWidth(Number width) {
 	mainWidth = width;
 	updateSizer();
+	dispatchEvent(new UIEvent(), UIEvent::CHANGE_EVENT);	
+}
+
+void UIHSizer::setMinimumSize(Number minimumSize) {
+	this->minimumSize = minimumSize;
 }
 			
 void UIHSizer::addLeftChild(UIElement *element) {
@@ -154,39 +182,61 @@ void UIHSizer::addRightChild(UIElement *element) {
 	updateSizer();
 }
 
+void UIHSizer::removeLeftChild() {
+	if(firstElement) {
+		childElements->removeChild(firstElement);
+		firstElement = NULL;
+	}
+}
+
+void UIHSizer::removeRightChild() {
+	if(secondElement) {
+		childElements->removeChild(secondElement);
+		secondElement = NULL;
+	}
+}
+
+UIElement *UIHSizer::getLeftChild() {
+	return firstElement;
+}
+
+UIElement *UIHSizer::getRightChild() {
+	return secondElement;
+}
+
 void UIHSizer::updateSizer() {
 
 	if(leftSizer) {
 	
 		if(firstElement) {
 			firstElement->setPosition(0,0);
-			firstElement->Resize(mainWidth, height);
+			firstElement->Resize(mainWidth, getHeight());
 		}	
 		if(secondElement) {
 			secondElement->setPosition(mainWidth+1,0);
-			secondElement->Resize(width-mainWidth-1, height);	
+			secondElement->Resize(getWidth()-mainWidth-1, getHeight());	
 		}
 
-		separatorBgShape->setShapeSize(1, height);
+		separatorBgShape->Resize(1, getHeight());
 		separatorBgShape->setPosition(mainWidth,0);
-		separatorHitShape->setShapeSize(8, height);
+		separatorHitShape->Resize(8, getHeight());
 		separatorHitShape->setPosition(mainWidth-4,0);
 		
 	} else {
 	
 		if(firstElement) {
 			firstElement->setPosition(0,0);
-			firstElement->Resize(width-mainWidth, height);
+			firstElement->Resize(getWidth()-mainWidth, getHeight());
 		}	
 		if(secondElement) {
-			secondElement->setPosition(width-mainWidth+1,0);
-			secondElement->Resize(mainWidth-1, height);	
+			secondElement->setPosition(getWidth()-mainWidth+1,0);
+			secondElement->Resize(mainWidth-1, getHeight());	
 		}
 
-		separatorBgShape->setShapeSize(1, height);
-		separatorBgShape->setPosition(width-mainWidth,0);
-		separatorHitShape->setShapeSize(8, height);
-		separatorHitShape->setPosition(width-mainWidth-4,0);
+		separatorBgShape->Resize(1, getHeight());
+		separatorBgShape->setPosition(getWidth()-mainWidth,0);
+		separatorHitShape->Resize(8, getHeight());
+		separatorHitShape->setPosition(getWidth()-mainWidth-4,0);
 	
 	}
 }

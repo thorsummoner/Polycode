@@ -64,8 +64,8 @@ NewProjectWindow::NewProjectWindow() : UIWindow(L"Create New Project", 480, 280)
 		}
 	}
 	
-	ScreenLabel *label2 = new ScreenLabel(L"PROJECT NAME", 18, "section", Label::ANTIALIAS_FULL);
-	label2->color.a = 0.4;
+	UILabel *label2 = new UILabel(L"PROJECT NAME", 18, "section", Label::ANTIALIAS_FULL);
+	label2->color.a = 1.0;
 	addChild(label2);
 	label2->setPosition(padding+220, templateContainer->getPosition().y-2);		
 
@@ -73,8 +73,8 @@ NewProjectWindow::NewProjectWindow() : UIWindow(L"Create New Project", 480, 280)
 	addChild(projectNameInput);
 	projectNameInput->setPosition(label2->getPosition().x-6, label2->getPosition().y + 25);
 	
-	ScreenLabel *label3 = new ScreenLabel(L"PROJECT LOCATION", 18, "section", Label::ANTIALIAS_FULL);
-	label3->color.a = 0.4;
+	UILabel *label3 = new UILabel(L"PROJECT LOCATION", 18, "section", Label::ANTIALIAS_FULL);
+	label3->color.a = 1.0;
 	addChild(label3);
 	label3->setPosition(padding+220, templateContainer->getPosition().y+65);		
 	
@@ -176,7 +176,7 @@ void NewProjectWindow::parseTemplatesIntoTree(UITree *tree, OSFileEntry folder) 
 	for(int i=0; i < templates.size(); i++) {
 		OSFileEntry entry = templates[i];
 		if(entry.type == OSFileEntry::TYPE_FOLDER) {
-			UITree *newChild = tree->addTreeChild("templateIcon.png", entry.name, NULL);			
+			UITree *newChild = tree->addTreeChild("file.png", entry.name, NULL);			
 			TemplateUserData *data = new TemplateUserData();
 			data->type = 1;
 			data->templateFolder = entry.fullPath;

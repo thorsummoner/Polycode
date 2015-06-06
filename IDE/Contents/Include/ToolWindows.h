@@ -49,6 +49,20 @@ class TextInputPopup : public UIWindow {
 		UIButton *okButton;	
 };
 
+class MessagePopup : public UIWindow {
+    public:
+    MessagePopup();
+    ~MessagePopup();
+    
+    void setCaption(String caption);
+    void handleEvent(Event *event);
+    
+        String action;
+        UILabel *captionLabel;
+        UIButton *okButton;
+    
+};
+
 class YesNoPopup : public UIWindow {
 	public:
 		YesNoPopup();
@@ -59,12 +73,13 @@ class YesNoPopup : public UIWindow {
 		
 		String action;
 	
-		ScreenLabel *captionLabel;
+		UILabel *captionLabel;
 	
-		ScreenEntity *buttonAnchor;
+		Entity *buttonAnchor;
 		UIButton *cancelButton;
 		UIButton *okButton;	
 };
+
 
 class YesNoCancelPopup : public UIWindow {
 	public:
@@ -76,10 +91,60 @@ class YesNoCancelPopup : public UIWindow {
 		
 		String action;
 	
-		ScreenLabel *captionLabel;
+		UILabel *captionLabel;
 	
-		ScreenEntity *buttonAnchor;
+		Entity *buttonAnchor;
 		UIButton *cancelButton;
 		UIButton *noButton;		
 		UIButton *okButton;
 };
+
+class AssetImporterWindow : public UIWindow {
+	public:
+		AssetImporterWindow();
+		~AssetImporterWindow();
+
+		void clearFiles();
+		void addFile(String fileName);
+		void setFilesToImport(String files);
+		
+		void setSourceFileAndTargetFolder(String file, String folder, String projectRelativeFolder);
+		void refreshPreview();
+			
+		void handleEvent(Event *event);	
+			
+	protected:
+
+		String file;
+		String folder;
+		String projectRelativeFolder;
+    
+		UIButton *cancelButton;
+		UIButton *okButton;
+		std::vector<UILabel*> fileLabels;
+
+		UICheckBox *usePrefixCheckbox;
+		UITextInput *prefixInput;
+		UICheckBox *addMeshesCheckbox;
+		UICheckBox *generateTangensCheckbox;
+		UICheckBox *generateNormalsCheckbox;
+		UICheckBox *swapZYAxisCheckbox;
+
+        UICheckBox *exportNormals;
+        UICheckBox *exportTangents;
+        UICheckBox *exportColors;
+        UICheckBox *exportBoneWeights;
+        UICheckBox *exportUVs;
+        UICheckBox *exportSecondaryUVs;
+        UICheckBox *exportScene;
+    
+        UICheckBox *generateMatFile;
+        UICheckBox *overrideMaterial;
+        UITextInput *overrideMaterialInput;
+    
+		Entity *filesAnchor;
+		UIScrollContainer *filesScroller;
+
+		UILabel *filesToImportLabel;
+};
+

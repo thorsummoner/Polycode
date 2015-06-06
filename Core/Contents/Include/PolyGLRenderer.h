@@ -1,4 +1,4 @@
-
+    
 /*
 Copyright (C) 2011 by Ivan Safrin
 
@@ -121,17 +121,16 @@ namespace Polycode {
 		void bindFrameBufferTextureDepth(Texture *texture);		
 		void unbindFramebuffers();
 		
+		Vector2 Project(const Matrix4 &cameraMatrix, const Matrix4 &projectionMatrix, const Polycode::Rectangle &viewport, const Vector3 &coordiante) const;
+		
 		void cullFrontFaces(bool val);
 				
 		void pushRenderDataArray(RenderDataArray *array);
-		RenderDataArray *createRenderDataArrayForMesh(Mesh *mesh, int arrayType);
-		RenderDataArray *createRenderDataArray(int arrayType);
-		void setRenderArrayData(RenderDataArray *array, Number *arrayData);
-		void drawArrays(int drawType);		
+		void drawArrays(int drawType, IndexDataArray *indexArray);
 				
-		void setOrthoMode(Number xSize=0.0f, Number ySize=0.0f, bool centered = false);
-		void _setOrthoMode(Number orthoSizeX, Number orthoSizeY);
-		void setPerspectiveMode();
+		void setProjectionOrtho(Number xSize=0.0f, Number ySize=0.0f, Number near=-256.0f, Number far=256.0f, bool centered = false);
+        void setProjectionMatrix(Matrix4 matrix);
+		void setPerspectiveDefaults();
 		
 		void enableBackfaceCulling(bool val);
 		
@@ -144,19 +143,23 @@ namespace Polycode {
 		void setTexture(Texture *texture);		
 
 		Image *renderScreenToImage();
-		void clearScreen();	
+		Image *renderBufferToImage(Texture *texture);
+		void clearScreen(bool clearColor = true, bool clearDepth = true);
 		
 		void translate2D(Number x, Number y);
 		void rotate2D(Number angle);
-		void scale2D(Vector2 *scale);
+		void scale2D(const Vector2 &scale);
 		
 		void enableScissor(bool val);
 		void setScissorBox(Polycode::Rectangle box);		
 		
-		Vector3 projectRayFrom2DCoordinate(Number x, Number y, Matrix4 cameraMatrix, Matrix4 projectionMatrix);
+		Vector3 projectRayFrom2DCoordinate(Number x, Number y, const Matrix4 &cameraMatrix, const Matrix4 &projectionMatrix, const Polycode::Rectangle &viewport);
+		Polycode::Rectangle getViewport();
 		
 		void setLineSize(Number lineSize);
-		
+		void setPointSize(Number pointSize);
+		void setPointSmooth(bool val);
+				
 		void setVertexColor(Number r, Number g, Number b, Number a);
 		
 		void setBlendingMode(int blendingMode);
@@ -165,20 +168,23 @@ namespace Polycode {
 		void enableFog(bool enable);
 		void setFogProperties(int fogMode, Color color, Number density, Number startDepth, Number endDepth);		
 				
-		void translate3D(Vector3 *position);
+		void translate3D(const Vector3 &position);
 		void translate3D(Number x, Number y, Number z);
-		void scale3D(Vector3 *scale);
+		void scale3D(const Vector3 &scale);
 		
 		Matrix4 getProjectionMatrix();
 		Matrix4 getModelviewMatrix();		
 		void setModelviewMatrix(Matrix4 m);	
-		void multModelviewMatrix(Matrix4 m);		
+		void multModelviewMatrix(Matrix4 m);
+		
+        void setWireframePolygonMode(bool val);
 		
 		void enableDepthTest(bool val);
 		void enableDepthWrite(bool val);
 				
-		void setClippingPlanes(Number nearPlane_, Number farPlane_);
-				
+		void setProjectionFromFrustum(Number left, Number right, Number bottom, Number top, Number near, Number far);
+		void setProjectionFromFoV(Number fov, Number near, Number far);
+
 		void clearBuffer(bool colorBuffer, bool depthBuffer);	
 		void drawToColorBuffer(bool val);
 		
@@ -187,18 +193,14 @@ namespace Polycode {
 		void pushMatrix();
 		void popMatrix();		
 		
-		Vector3 Unproject(Number x, Number y);
+		Vector3 Unproject(Number x, Number y, const Matrix4 &cameraMatrix, const Matrix4 &projectionMatrix, const Polycode::Rectangle &viewport);
 		
 		void setDepthFunction(int depthFunction);
 						
 		void clearShader();
-		void applyMaterial(Material *material,  ShaderBinding *localOptions, unsigned int shaderIndex);
 		
 	protected:
 		void initOSSpecific();
-		
-		Number nearPlane;
-		Number farPlane;
 		
 		int verticesToDraw;
 		

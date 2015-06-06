@@ -22,7 +22,6 @@
 
 #include "PolyGLHeaders.h"
 #include "PolyGLVertexBuffer.h"
-#include "PolyPolygon.h"
 
 #if defined(__APPLE__) && defined(__MACH__)
 
@@ -48,131 +47,92 @@ extern PFNGLGETBUFFERPOINTERVARBPROC glGetBufferPointervARB;
 #endif
 
 OpenGLVertexBuffer::OpenGLVertexBuffer(Mesh *mesh) : VertexBuffer() {
+	
+    vertexBufferID = -1;
+    texCoordBufferID = -1;
+    normalBufferID = -1;
+    colorBufferID = -1;
+    tangentBufferID = -1;
+    indexBufferID = -1;
+    boneWeightBufferID = -1;
+    boneIndexBufferID = -1;
+    
+    
+	meshType = mesh->getMeshType();
+    vertexCount = mesh->vertexPositionArray.getDataSize() / 3;
+
 	glGenBuffersARB(1, &vertexBufferID);
 	glBindBufferARB(GL_ARRAY_BUFFER_ARB, vertexBufferID);
-	
-	meshType = mesh->getMeshType();
-	
-	long bufferSize = 0;
-	long newBufferSize = 0;		
-	GLfloat *buffer = (GLfloat*)malloc(1);	
-	
-	vertexCount = 0;
-	for(int i=0; i < mesh->getPolygonCount(); i++) {
-		for(int j=0; j < mesh->getPolygon(i)->getVertexCount(); j++) {
-			vertexCount++;			
-			newBufferSize = bufferSize + 3;
-			buffer = (GLfloat*)realloc(buffer, newBufferSize * sizeof(GLfloat));			
-			buffer[bufferSize+0] = mesh->getPolygon(i)->getVertex(j)->x;
-			buffer[bufferSize+1] = mesh->getPolygon(i)->getVertex(j)->y;
-			buffer[bufferSize+2] = mesh->getPolygon(i)->getVertex(j)->z;			
-			bufferSize = newBufferSize;	
-		}		   
-	}
-	glBufferDataARB(GL_ARRAY_BUFFER_ARB, bufferSize*sizeof(GLfloat), buffer, GL_STATIC_DRAW_ARB);	
-	free(buffer);
-	
+    
+    glBufferDataARB(GL_ARRAY_BUFFER_ARB, mesh->vertexPositionArray.getDataSize() * sizeof(PolyRendererVertexType), mesh->vertexPositionArray.getArrayData(), GL_STATIC_DRAW_ARB);
 
-	glGenBuffersARB(1, &texCoordBufferID);
-	glBindBufferARB(GL_ARRAY_BUFFER_ARB, texCoordBufferID);
-	
-	bufferSize = 0;	
-	newBufferSize = 0;		
-	buffer = (GLfloat*)malloc(1);	
-	
-	for(int i=0; i < mesh->getPolygonCount(); i++) {
-		for(int j=0; j < mesh->getPolygon(i)->getVertexCount(); j++) {
-			newBufferSize = bufferSize + 2;			
-			buffer = (GLfloat*)realloc(buffer, newBufferSize * sizeof(GLfloat));		
-			buffer[bufferSize+0] = mesh->getPolygon(i)->getVertex(j)->getTexCoord().x;
-			buffer[bufferSize+1] = mesh->getPolygon(i)->getVertex(j)->getTexCoord().y;
-			bufferSize = newBufferSize;					
-		}		   
-	}
-	
-	glBufferDataARB(GL_ARRAY_BUFFER_ARB, bufferSize*sizeof(GLfloat), buffer, GL_STATIC_DRAW_ARB);	
-	free(buffer);
-	
-	
-	glGenBuffersARB(1, &normalBufferID);
-	glBindBufferARB(GL_ARRAY_BUFFER_ARB, normalBufferID);
-	
-	bufferSize = 0;
-	newBufferSize = 0;		
-	buffer = (GLfloat*)malloc(1);	
-	
-	for(int i=0; i < mesh->getPolygonCount(); i++) {
-		for(int j=0; j < mesh->getPolygon(i)->getVertexCount(); j++) {
-			newBufferSize = bufferSize + 3;			
-			buffer = (GLfloat*)realloc(buffer, newBufferSize * sizeof(GLfloat));		
-			if(mesh->getPolygon(i)->useVertexNormals) {
-				buffer[bufferSize+0] = mesh->getPolygon(i)->getVertex(j)->normal.x;
-				buffer[bufferSize+1] = mesh->getPolygon(i)->getVertex(j)->normal.y;
-				buffer[bufferSize+2] = mesh->getPolygon(i)->getVertex(j)->normal.z;				
-			} else {
-				buffer[bufferSize+0] = mesh->getPolygon(i)->getFaceNormal().x;
-				buffer[bufferSize+1] = mesh->getPolygon(i)->getFaceNormal().y;
-				buffer[bufferSize+2] = mesh->getPolygon(i)->getFaceNormal().z;
-			}
-			bufferSize = newBufferSize;					
-		}		   
-	}
-	
-	glBufferDataARB(GL_ARRAY_BUFFER_ARB, bufferSize*sizeof(GLfloat), buffer, GL_STATIC_DRAW_ARB);	
-	free(buffer);	
-		
-		
-
-	glGenBuffersARB(1, &tangentBufferID);
-	glBindBufferARB(GL_ARRAY_BUFFER_ARB, tangentBufferID);
-	
-	bufferSize = 0;
-	newBufferSize = 0;		
-	buffer = (GLfloat*)malloc(1);	
-	
-	for(int i=0; i < mesh->getPolygonCount(); i++) {
-		for(int j=0; j < mesh->getPolygon(i)->getVertexCount(); j++) {
-			newBufferSize = bufferSize + 3;			
-			buffer = (GLfloat*)realloc(buffer, newBufferSize * sizeof(GLfloat));		
-			buffer[bufferSize+0] = mesh->getPolygon(i)->getVertex(j)->tangent.x;
-			buffer[bufferSize+1] = mesh->getPolygon(i)->getVertex(j)->tangent.y;
-			buffer[bufferSize+2] = mesh->getPolygon(i)->getVertex(j)->tangent.z;
-			bufferSize = newBufferSize;					
-		}		   
-	}
-	
-	glBufferDataARB(GL_ARRAY_BUFFER_ARB, bufferSize*sizeof(GLfloat), buffer, GL_STATIC_DRAW_ARB);	
-	free(buffer);	
-	
-	glGenBuffersARB(1, &colorBufferID);
-	glBindBufferARB(GL_ARRAY_BUFFER_ARB, colorBufferID);
-	
-	bufferSize = 0;
-	newBufferSize = 0;		
-	buffer = (GLfloat*)malloc(1);	
-	
-	for(int i=0; i < mesh->getPolygonCount(); i++) {
-		for(int j=0; j < mesh->getPolygon(i)->getVertexCount(); j++) {
-			newBufferSize = bufferSize + 4;			
-			buffer = (GLfloat*)realloc(buffer, newBufferSize * sizeof(GLfloat));
-			buffer[bufferSize+0] = mesh->getPolygon(i)->getVertex(j)->vertexColor.r;
-			buffer[bufferSize+1] = mesh->getPolygon(i)->getVertex(j)->vertexColor.g;
-			buffer[bufferSize+2] = mesh->getPolygon(i)->getVertex(j)->vertexColor.b;
-			buffer[bufferSize+3] = mesh->getPolygon(i)->getVertex(j)->vertexColor.a;			
-			bufferSize = newBufferSize;					
-		}		   
-	}
-	
-	glBufferDataARB(GL_ARRAY_BUFFER_ARB, bufferSize*sizeof(GLfloat), buffer, GL_STATIC_DRAW_ARB);	
-	free(buffer);	
-	
+    
+    if(mesh->vertexTexCoordArray.getDataSize() == vertexCount * 2) {
+        glGenBuffersARB(1, &texCoordBufferID);
+        glBindBufferARB(GL_ARRAY_BUFFER_ARB, texCoordBufferID);
+            
+        glBufferDataARB(GL_ARRAY_BUFFER_ARB,  mesh->vertexTexCoordArray.getDataSize() * sizeof(PolyRendererVertexType), mesh->vertexTexCoordArray.getArrayData(), GL_STATIC_DRAW_ARB);
+    }
+    
+    if(mesh->vertexNormalArray.getDataSize() == vertexCount * 3) {
+        glGenBuffersARB(1, &normalBufferID);
+        glBindBufferARB(GL_ARRAY_BUFFER_ARB, normalBufferID);
+        glBufferDataARB(GL_ARRAY_BUFFER_ARB,  mesh->vertexNormalArray.getDataSize() * sizeof(PolyRendererVertexType), mesh->vertexNormalArray.getArrayData(), GL_STATIC_DRAW_ARB);
+    }
+    
+    if(mesh->vertexTangentArray.getDataSize() == vertexCount * 3) {
+        glGenBuffersARB(1, &tangentBufferID);
+        glBindBufferARB(GL_ARRAY_BUFFER_ARB, tangentBufferID);
+        
+        glBufferDataARB(GL_ARRAY_BUFFER_ARB,  mesh->vertexTangentArray.getDataSize() * sizeof(PolyRendererVertexType), mesh->vertexTangentArray.getArrayData(), GL_STATIC_DRAW_ARB);
+    }
+    
+    if(mesh->vertexBoneWeightArray.getDataSize() == vertexCount * 4) {
+        glGenBuffersARB(1, &boneWeightBufferID);
+        glBindBufferARB(GL_ARRAY_BUFFER_ARB, boneWeightBufferID);
+        
+        glBufferDataARB(GL_ARRAY_BUFFER_ARB,  mesh->vertexBoneWeightArray.getDataSize() * sizeof(PolyRendererVertexType), mesh->vertexBoneWeightArray.getArrayData(), GL_STATIC_DRAW_ARB);
+    }
+    
+    if(mesh->vertexBoneIndexArray.getDataSize() == vertexCount * 4) {
+        glGenBuffersARB(1, &boneIndexBufferID);
+        glBindBufferARB(GL_ARRAY_BUFFER_ARB, boneIndexBufferID);
+        
+        glBufferDataARB(GL_ARRAY_BUFFER_ARB,  mesh->vertexBoneIndexArray.getDataSize() * sizeof(PolyRendererVertexType), mesh->vertexBoneIndexArray.getArrayData(), GL_STATIC_DRAW_ARB);
+    }
+    
+    if(mesh->vertexColorArray.getDataSize() == vertexCount * 4) {
+        glGenBuffersARB(1, &colorBufferID);
+        glBindBufferARB(GL_ARRAY_BUFFER_ARB, colorBufferID);
+            
+        glBufferDataARB(GL_ARRAY_BUFFER_ARB,  mesh->vertexColorArray.getDataSize() * sizeof(PolyRendererVertexType), mesh->vertexColorArray.getArrayData(), GL_STATIC_DRAW_ARB);
+    }
+    
+    if(mesh->indexedMesh && mesh->indexArray.getDataSize() > 0) {
+        glGenBuffersARB(1, &indexBufferID);
+        glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB, indexBufferID);
+        glBufferDataARB(GL_ELEMENT_ARRAY_BUFFER_ARB,  mesh->indexArray.getDataSize() * sizeof(PolyRendererIndexType), mesh->indexArray.getArrayData(), GL_STATIC_DRAW_ARB);
+        indexCount = mesh->indexArray.getDataSize();
+    }
+    
 }
 
 OpenGLVertexBuffer::~OpenGLVertexBuffer() {
 	glDeleteBuffersARB(1, &vertexBufferID);
 	glDeleteBuffersARB(1, &texCoordBufferID);
 	glDeleteBuffersARB(1, &normalBufferID);
-	glDeleteBuffersARB(1, &colorBufferID);	
+	glDeleteBuffersARB(1, &colorBufferID);
+	glDeleteBuffersARB(1, &indexBufferID);
+	glDeleteBuffersARB(1, &boneWeightBufferID);
+	glDeleteBuffersARB(1, &boneIndexBufferID);
+}
+
+GLuint OpenGLVertexBuffer::getBoneWeightBufferID() {
+    return boneWeightBufferID;
+}
+
+GLuint OpenGLVertexBuffer::getBoneIndexBufferID() {
+    return boneIndexBufferID;
 }
 
 GLuint OpenGLVertexBuffer::getColorBufferID() {
@@ -193,4 +153,8 @@ GLuint OpenGLVertexBuffer::getVertexBufferID() {
 
 GLuint OpenGLVertexBuffer::getTangentBufferID() {
 	return tangentBufferID;
+}
+
+GLuint OpenGLVertexBuffer::getIndexBufferID() {
+    return indexBufferID;
 }

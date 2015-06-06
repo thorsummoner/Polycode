@@ -24,21 +24,22 @@
 
 extern UIGlobalMenu *globalMenu;
 
-PolycodeProjectBrowser::PolycodeProjectBrowser() : UIElement() {
+PolycodeProjectBrowser::PolycodeProjectBrowser(PolycodeProject *project) : UIElement() {
 
-	headerBg = new ScreenShape(ScreenShape::SHAPE_RECT,10,10);
+	this->project = project;	
+	headerBg = new UIRect(10,10);
 	addChild(headerBg);
-	headerBg->setPositionMode(ScreenEntity::POSITION_TOPLEFT);
+	headerBg->setAnchorPoint(-1.0, -1.0, 0.0);
 	headerBg->color.setColorHexFromString(CoreServices::getInstance()->getConfig()->getStringValue("Polycode", "uiHeaderBgColor"));
 	
-	ScreenLabel *label = new ScreenLabel("PROJECT BROWSER", 18, "section", Label::ANTIALIAS_FULL);
+	UILabel *label = new UILabel("PROJECT BROWSER", 18, "section", Label::ANTIALIAS_FULL);
 	label->color.setColorHexFromString(CoreServices::getInstance()->getConfig()->getStringValue("Polycode", "uiHeaderFontColor"));
 	
 	addChild(label);
 	label->setPosition(10, 3);
 
 
-	treeContainer = new UITreeContainer("boxIcon.png", L"Projects", 200, 555);
+	treeContainer = new UITreeContainer("boxIcon.png", project->getProjectName(), 200, 555);
 	treeContainer->getRootNode()->toggleCollapsed();
 	treeContainer->getRootNode()->addEventListener(this, UITreeEvent::SELECTED_EVENT);
 	treeContainer->addEventListener(this, InputEvent::EVENT_MOUSEDOWN);
@@ -46,56 +47,21 @@ PolycodeProjectBrowser::PolycodeProjectBrowser() : UIElement() {
 	
 	BrowserUserData *data = new BrowserUserData();
 	data->type = 0;
-	data->parentProject = NULL;
+	data->parentProject = project;
 	treeContainer->getRootNode()->setUserData((void*) data)	;
-	
+
 	addChild(treeContainer);		
 	selectedData = NULL;
+	
+	parseFolderIntoNode(treeContainer->getRootNode(), project->getRootFolder());
 }
 
 PolycodeProjectBrowser::~PolycodeProjectBrowser() {
 	
 }
 
-void PolycodeProjectBrowser::refreshProject(PolycodeProject *project) {
-	
-	UITree *projectTree = treeContainer->getRootNode();
-	
-	for(int i=0; i < projectTree->getNumTreeChildren(); i++) {
-		UITree *projectChild = projectTree->getTreeChild(i);
-		BrowserUserData *userData = (BrowserUserData*)projectChild->getUserData();
-		if(userData->parentProject == project) {
-			parseFolderIntoNode(projectChild, project->getRootFolder(), project);		
-			return;
-		}
-	}	
-	
-}
-
-void PolycodeProjectBrowser::removeProject(PolycodeProject *project) {
-	
-	UITree *projectTree = treeContainer->getRootNode();
-	
-	for(int i=0; i < projectTree->getNumTreeChildren(); i++) {
-		UITree *projectChild = projectTree->getTreeChild(i);
-		BrowserUserData *userData = (BrowserUserData*)projectChild->getUserData();
-		if(userData->parentProject == project) {
-			projectTree->removeTreeChild(projectChild);
-			return;
-		}
-	}
-}
-
-void PolycodeProjectBrowser::addProject(PolycodeProject *project) {
-	UITree *projectTree = treeContainer->getRootNode()->addTreeChild("projectIcon.png", project->getProjectName(), (void*) project);
-	projectTree->toggleCollapsed();
-	
-	BrowserUserData *data = new BrowserUserData();
-	data->type = 3;
-	data->parentProject = project;
-	projectTree->setUserData((void*) data)	;
-	
-	parseFolderIntoNode(projectTree, project->getRootFolder(), project);	
+void PolycodeProjectBrowser::Refresh() {
+	parseFolderIntoNode(treeContainer->getRootNode(), project->getRootFolder());		
 }
 
 void PolycodeProjectBrowser::handleEvent(Event *event) {
@@ -103,7 +69,7 @@ void PolycodeProjectBrowser::handleEvent(Event *event) {
 	if(event->getDispatcher() == contextMenu) {
 		UIMenuItem *item = contextMenu->getSelectedItem();
 
-		PolycodeProjectBrowserEvent *bEvent = new PolycodeProjectBrowserEvent();			
+		PolycodeProjectBrowserEvent *bEvent = new PolycodeProjectBrowserEvent();
 		bEvent->command = item->_id;
 		dispatchEvent(bEvent, PolycodeProjectBrowserEvent::HANDLE_MENU_COMMAND);
 						
@@ -121,12 +87,17 @@ void PolycodeProjectBrowser::handleEvent(Event *event) {
 			contextMenu->addOption("New Project", "add_new_project");
 			contextMenu->addOption("New Folder", "add_new_folder");
 			contextMenu->addDivider();
-			contextMenu->addOption("Add external files", "add_files");			
+			contextMenu->addOption("Add external files", "add_files");
+			contextMenu->addOption("Import 3D assets", "import_assets");
 			contextMenu->addDivider();
 			contextMenu->addOption("Refresh", "refresh");
-			contextMenu->addOption("Rename", "rename");						
-			contextMenu->addDivider();
-			contextMenu->addOption("Remove", "remove");
+			if (treeContainer->getRootNode() == treeContainer->getRootNode()->getSelectedNode()){
+				contextMenu->addOption("Close Project", "close_project");
+			} else {
+				contextMenu->addOption("Rename", "rename");
+				contextMenu->addDivider();
+				contextMenu->addOption("Remove", "remove");
+			}
 
 			contextMenu->fitToScreenVertical();
 			
@@ -144,7 +115,7 @@ void PolycodeProjectBrowser::handleEvent(Event *event) {
 		}
 	}
 	
-	ScreenEntity::handleEvent(event);
+	Entity::handleEvent(event);
 }
 
 UITree *PolycodeProjectBrowser::nodeHasName(UITree *node, String name) {
@@ -166,7 +137,103 @@ bool PolycodeProjectBrowser::listHasFileEntry(vector<OSFileEntry> files, OSFileE
 	return false;
 }
 
-void PolycodeProjectBrowser::parseFolderIntoNode(UITree *node, String spath, PolycodeProject *parentProject) {
+void parseOpenNodesIntoEntry(ObjectEntry *entry, UITree *node, bool addNewNode) {
+
+	bool hasOpenNodes = false;
+	for(int i=0; i < node->getNumTreeChildren(); i++) {
+		UITree *child = node->getTreeChild(i);	
+		if(!child->isCollapsed()) {	
+			hasOpenNodes = true;
+		}
+	}
+
+	if(!hasOpenNodes) {
+		return;		
+	}
+
+	ObjectEntry *childNodes = entry;
+	if(addNewNode) {
+		childNodes = entry->addChild("child_nodes");
+	}
+	
+	for(int i=0; i < node->getNumTreeChildren(); i++) {
+		UITree *child = node->getTreeChild(i);
+		if(!child->isCollapsed()) {
+			ObjectEntry *newEntry = childNodes->addChild("open_node");
+			newEntry->addChild("name", child->getLabelText());			
+			parseOpenNodesIntoEntry(newEntry, child, true);
+		}
+	}
+}
+
+ObjectEntry *PolycodeProjectBrowser::getBrowserConfig() {
+	ObjectEntry *configEntry = new ObjectEntry();	
+	configEntry->name = "project_browser";
+	
+	configEntry->addChild("width", getWidth());	
+	ObjectEntry *openNodes = configEntry->addChild("open_nodes");
+	parseOpenNodesIntoEntry(openNodes, treeContainer->getRootNode(), false);
+	
+	return configEntry;
+}
+
+void PolycodeProjectBrowser::applyOpenNodeToTree(UITree* treeNode, ObjectEntry *nodeEntry) {
+	for(int i=0; i < treeNode->getNumTreeChildren(); i++) {
+		if(treeNode->getTreeChild(i)->getLabelText() == (*nodeEntry)["name"]->stringVal ){
+			if(treeNode->getTreeChild(i)->isCollapsed()) {
+				treeNode->getTreeChild(i)->toggleCollapsed();
+				ObjectEntry *childNodes = (*nodeEntry)["child_nodes"];
+				if(childNodes) {
+					for(int j=0; j < childNodes->length; j++) {
+						applyOpenNodeToTree(treeNode->getTreeChild(i), (*childNodes)[j]);
+					}
+				}
+			}
+		}
+	}
+}
+
+void PolycodeProjectBrowser::applyBrowserConfig(ObjectEntry *entry) {
+	ObjectEntry *openNodes = (*entry)["open_nodes"];
+	if(openNodes) {
+		for(int i=0; i < openNodes->length; i++) {
+			ObjectEntry *openNode = (*openNodes)[i];
+			if(openNode) {				
+				applyOpenNodeToTree(treeContainer->getRootNode(), openNode);
+			}
+		}
+	}
+}
+
+String PolycodeProjectBrowser::getIconForExtension(String extension) {
+    if(extension == "mesh") {
+        return "treeIcons/mesh.png";
+    } else if(extension == "png" || extension == "hdr" || extension == "jpg" || extension == "tga" || extension == "psd") {
+        return "treeIcons/image.png";
+    } else if(extension == "frag" || extension == "vert") {
+        return "treeIcons/shader.png";
+    } else if(extension == "otf" || extension == "ttf") {
+        return "treeIcons/font.png";
+    } else if(extension == "skeleton") {
+        return "treeIcons/skeleton.png";
+    } else if(extension == "anim") {
+        return "treeIcons/animation.png";
+    } else if(extension == "ogg" || extension == "wav") {
+        return "treeIcons/sound.png";
+    } else if(extension == "entity") {
+        return "treeIcons/entity.png";
+    } else if(extension == "mat") {
+        return "treeIcons/materials.png";
+    } else if(extension == "sprite" || extension == "sprites") {
+        return "treeIcons/sprites.png";
+    } else if(extension == "polyproject") {
+        return "treeIcons/project.png";
+    } else {
+        return "file.png";
+    }
+}
+
+void PolycodeProjectBrowser::parseFolderIntoNode(UITree *node, String spath) {
 	vector<OSFileEntry> files = OSBasics::parseFolder(spath, false);
 	
 	// check if files got deleted
@@ -186,18 +253,18 @@ void PolycodeProjectBrowser::parseFolderIntoNode(UITree *node, String spath, Pol
 				data->fileEntry = entry;
 				UITree *newChild = node->addTreeChild("folder.png", entry.name, (void*) data);
 				data->type = 2;	
-				data->parentProject = parentProject;
-				parseFolderIntoNode(newChild, entry.fullPath, parentProject);				
+				data->parentProject = project;
+				parseFolderIntoNode(newChild, entry.fullPath);				
 			} else {
-				parseFolderIntoNode(existing, entry.fullPath, parentProject);							
+				parseFolderIntoNode(existing, entry.fullPath);							
 			}
 		} else {
 			if(!nodeHasName(node, entry.name)) {
 				BrowserUserData *data = new BrowserUserData();
 				data->fileEntry = entry;
 				data->type = 1;
-				data->parentProject = parentProject;			
-				node->addTreeChild("file.png", entry.name, (void*) data);
+				data->parentProject = project;			
+				node->addTreeChild(getIconForExtension(entry.extension), entry.name, (void*) data);
 			}
 		}
 	}		
@@ -205,6 +272,7 @@ void PolycodeProjectBrowser::parseFolderIntoNode(UITree *node, String spath, Pol
 }
 
 void PolycodeProjectBrowser::Resize(Number width, Number height) {
-	headerBg->setShapeSize(width, 30);
+	headerBg->Resize(width, 30);
 	treeContainer->Resize(width, height-30);
+	UIElement::Resize(width, height);
 }

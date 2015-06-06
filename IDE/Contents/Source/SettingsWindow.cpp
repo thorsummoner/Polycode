@@ -28,9 +28,9 @@ SettingsWindow::SettingsWindow() : UIWindow(L"Settings", SETTINGS_WINDOW_WIDTH, 
 
 	closeOnEscape = true;
 
-	ScreenLabel *label = new ScreenLabel("TEXT EDITING", 22, "section", Label::ANTIALIAS_FULL);
+	UILabel *label = new UILabel("TEXT EDITING", 22, "section", Label::ANTIALIAS_FULL);
 	addChild(label);
-	label->color.a = 0.4;
+	label->color.a = 1.0;
 	label->setPosition(padding, 50);
 
 	useExternalTextEditorBox = new UICheckBox("Use external text editor", false);
@@ -47,9 +47,9 @@ SettingsWindow::SettingsWindow() : UIWindow(L"Settings", SETTINGS_WINDOW_WIDTH, 
 	externalTextEditorCommand->setPosition(padding, EDITOR_BROWSE_POS);
 	
 	
-	label = new ScreenLabel("Syntax highlighting theme", 12);
+	label = new UILabel("Syntax highlighting theme", 12);
 	addChild(label);
-	label->color.a = 0.6;
+	label->color.a = 1.0;
 	label->setPosition(padding, EDITOR_BROWSE_POS + 35);
 	
 	syntaxThemeBox = new UIComboBox(globalMenu, 300);
@@ -70,7 +70,49 @@ SettingsWindow::SettingsWindow() : UIWindow(L"Settings", SETTINGS_WINDOW_WIDTH, 
 	addChild(browseButton);
 	browseButton->setPosition(SETTINGS_WINDOW_WIDTH - (2*padding + BUTTON_WIDTH/2), EDITOR_BROWSE_POS);
 	
+	
+	label = new UILabel("GENERAL", 22, "section", Label::ANTIALIAS_FULL);
+	addChild(label);
+	label->color.a = 1.0;
+	label->setPosition(padding, 200);
 
+	label = new UILabel("UI theme (requires restart)", 12);
+	addChild(label);
+	label->color.a = 1.0;
+	label->setPosition(padding, 235);
+
+	uiThemeBox = new UIComboBox(globalMenu, 300);
+	addChild(uiThemeBox);
+	uiThemeBox->setPosition(padding, 255);
+	uiThemeBox->addEventListener(this, UIEvent::CHANGE_EVENT);
+	
+	std::vector<OSFileEntry> uiThemes = OSBasics::parseFolder(CoreServices::getInstance()->getCore()->getDefaultWorkingDirectory() + "/UIThemes", false);
+	
+	for(int i=0; i < uiThemes.size(); i++) {
+		if(uiThemes[i].type == OSFileEntry::TYPE_FOLDER) {
+            
+            // do not list retina theme copies
+            if(uiThemes[i].name.find("_retina") == -1) {
+                uiThemeBox->addComboItem(uiThemes[i].name);
+                if(uiThemes[i].name == CoreServices::getInstance()->getConfig()->getStringValue("Polycode", "uiTheme")) {
+                    uiThemeBox->setSelectedIndex(i);
+                }
+            }
+		}
+	}
+
+	label = new UILabel("Texture filtering (requires restart)", 12);
+	addChild(label);
+	label->color.a = 1.0;
+	label->setPosition(padding, 285);
+
+	textureFilteringBox = new UIComboBox(globalMenu, 300);
+	addChild(textureFilteringBox);
+	textureFilteringBox->setPosition(padding, 305);
+	textureFilteringBox->addEventListener(this, UIEvent::CHANGE_EVENT);
+	textureFilteringBox->addComboItem("Linear");
+	textureFilteringBox->addComboItem("Nearest");
+	
 	cancelButton = new UIButton("Cancel", BUTTON_WIDTH);
 	cancelButton->addEventListener(this, UIEvent::CLICK_EVENT);
 	addChild(cancelButton);
@@ -151,6 +193,18 @@ void SettingsWindow::updateUI() {
 		if(globalSyntaxTheme->name == syntaxThemeBox->getItemAtIndex(i)->label) {
 			syntaxThemeBox->setSelectedIndex(i);
 		} 
+	}
+
+	for(int i=0; i < uiThemeBox->getNumItems(); i++) {
+		if(config->getStringValue("Polycode", "uiTheme") == uiThemeBox->getItemAtIndex(i)->label) {
+			uiThemeBox->setSelectedIndex(i);
+		} 
+	}
+	
+	if(config->getStringValue("Polycode", "textureFilteringMode") == "nearest") {
+		textureFilteringBox->setSelectedIndex(1);
+	} else {
+		textureFilteringBox->setSelectedIndex(0);	
 	}
 	
 }

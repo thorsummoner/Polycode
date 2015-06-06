@@ -40,15 +40,15 @@ BackTraceEntry::BackTraceEntry(String fileName, int lineNumber, PolycodeProject 
 	String fontName = conf->getStringValue("Polycode", "uiDefaultFontName");
 	int fontSize = conf->getNumericValue("Polycode", "uiDefaultFontSize");	
 
-	labelBg = new ScreenShape(ScreenShape::SHAPE_RECT, 20,20);
-	labelBg->setPositionMode(ScreenEntity::POSITION_TOPLEFT);
-	labelBg->setColor(0.0, 0.0, 0.0, 0.15);
+	labelBg = new UIRect(20,20);
+	labelBg->setAnchorPoint(-1.0, -1.0, 0.0);
+	labelBg->setColor(0.3, 0.3, 0.3, 1.0);
 	labelBg->processInputEvents = true;
 	addChild(labelBg);	
 	
 	labelBg->addEventListener(this, InputEvent::EVENT_MOUSEDOWN);
 	
-	label = new ScreenLabel(fileName+" on line "+String::IntToString(lineNumber), fontSize, fontName);
+	label = new UILabel(fileName+" on line "+String::IntToString(lineNumber), fontSize, fontName);
 	addChild(label);
 	label->setPosition(5,2);
 	
@@ -70,11 +70,12 @@ void BackTraceEntry::Select() {
 	
 	dispatchEvent(event, BackTraceEvent::EVENT_BACKTRACE_SELECTED);
 		
-	labelBg->setColor(0.0, 0.0, 1.0, 0.35);
+	labelBg->color.setColorHexFromString(CoreServices::getInstance()->getConfig()->getStringValue("Polycode", "uiAccentColor"));
+    
 }
 
 void BackTraceEntry::Deselect() {
-	labelBg->setColor(0.0, 0.0, 0.0, 0.15);
+	labelBg->setColor(0.3, 0.3, 0.3, 1.0);
 }
 
 
@@ -84,7 +85,7 @@ BackTraceEntry::~BackTraceEntry() {
 }
 
 void BackTraceEntry::Resize(Number width, Number height) {
-	labelBg->setShapeSize(width, 20);
+	labelBg->Resize(width, 20);
 
 }
 
@@ -93,12 +94,12 @@ BackTraceWindow::BackTraceWindow() : UIElement() {
 	Config *conf = CoreServices::getInstance()->getConfig();	
 	String fontName = conf->getStringValue("Polycode", "uiDefaultFontName");
 
-	labelBg = new ScreenShape(ScreenShape::SHAPE_RECT, 20,30);
-	labelBg->setPositionMode(ScreenEntity::POSITION_TOPLEFT);
+	labelBg = new UIRect(20,30);
+	labelBg->setAnchorPoint(-1.0, -1.0, 0.0);
 	labelBg->color.setColorHexFromString(CoreServices::getInstance()->getConfig()->getStringValue("Polycode", "uiHeaderBgColor"));
 	addChild(labelBg);
 	
-	ScreenLabel *label = new ScreenLabel("CRASH STACK", 18, "section");
+	UILabel *label = new UILabel("CRASH STACK", 18, "section");
 	label->color.setColorHexFromString(CoreServices::getInstance()->getConfig()->getStringValue("Polycode", "uiHeaderFontColor"));
 	addChild(label);
 	label->setPosition(5,3);
@@ -106,15 +107,15 @@ BackTraceWindow::BackTraceWindow() : UIElement() {
 }	
 
 void BackTraceWindow::Resize(Number width, Number height) {
-	labelBg->setShapeSize(width, 30);
-	this->width = width;
-	this->height = height;
+	labelBg->Resize(width, 30);
+	setWidth(width);
+	setHeight(height);
 	adjustEntries();
 }
 
 void BackTraceWindow::adjustEntries() {
 	for(int i=0; i < entries.size(); i++) {
-		entries[i]->Resize(width, 20);
+		entries[i]->Resize(getWidth(), 20);
 		entries[i]->setPosition(0, 30 + (i * 21));
 	}
 }
@@ -167,12 +168,12 @@ BackTraceWindow::~BackTraceWindow() {
 ConsoleWindow::ConsoleWindow() : UIElement() {
 
 
-	labelBg = new ScreenShape(ScreenShape::SHAPE_RECT, 20,30);
-	labelBg->setPositionMode(ScreenEntity::POSITION_TOPLEFT);
+	labelBg = new UIRect(20,30);
+	labelBg->setAnchorPoint(-1.0, -1.0, 0.0);
 	labelBg->color.setColorHexFromString(CoreServices::getInstance()->getConfig()->getStringValue("Polycode", "uiHeaderBgColor"));
 	addChild(labelBg);
 	
-	ScreenLabel *label = new ScreenLabel("CONSOLE", 18, "section");
+	UILabel *label = new UILabel("CONSOLE", 18, "section");
 	label->color.setColorHexFromString(CoreServices::getInstance()->getConfig()->getStringValue("Polycode", "uiHeaderFontColor"));
 	addChild(label);
 	label->setPosition(35,3);
@@ -182,26 +183,62 @@ ConsoleWindow::ConsoleWindow() : UIElement() {
 	addChild(consoleTextInput);	
 	addChild(debugTextInput);	
 	
-	clearButton = new UIImageButton("Images/clear_buffer_icon.png");
+	clearButton = new UIImageButton("main/clear_buffer_icon.png", 1.0, 16, 16);
 	addChild(clearButton);
 	
-	hideConsoleButton = new UIImageButton("Images/console_hide_button.png");
+	hideConsoleButton = new UIImageButton("main/console_hide_button.png", 1.0, 20, 20);
 	addChild(hideConsoleButton);
 	hideConsoleButton->setPosition(7,5);
+    
+    consoleBufferMaxSize = 256;
 	
 }
 
 void ConsoleWindow::Resize(Number width, Number height) {
 
-	labelBg->setShapeSize(width, 30);
+	labelBg->Resize(width, 30);
 	debugTextInput->Resize(width, height-25-30);
 	debugTextInput->setPosition(0, 30);
 
 	clearButton->setPosition(width - 22, 6);
 
 	consoleTextInput->Resize(width, 25);
-	consoleTextInput->setPosition(0, height-25);	
+	consoleTextInput->setPosition(0, height-25);
+    
+    consoleDirty = false;
+    consoleTimer = 0.0;
+    consoleRefreshInterval = 0.3;
 }
+
+void ConsoleWindow::Update() {
+    consoleTimer += Services()->getCore()->getElapsed();
+    if(consoleTimer > consoleRefreshInterval) {
+        consoleTimer = 0.0;
+        if(consoleDirty) {
+            String fullText;
+            for(int i=0; i < consoleBuffer.size(); i++) {
+                fullText += consoleBuffer[i];
+            }
+            debugTextInput->setText(fullText);
+            debugTextInput->getScrollContainer()->setScrollValue(0, 1.0);
+            consoleDirty = false;
+        }
+    }
+}
+
+void ConsoleWindow::clearBuffer() {
+    consoleBuffer.clear();
+    consoleDirty = true;
+}
+
+void ConsoleWindow::printToBuffer(String msg) {
+    consoleBuffer.push_back(msg);
+    if(consoleBuffer.size() > consoleBufferMaxSize) {
+        consoleBuffer.erase(consoleBuffer.begin());
+    }
+    consoleDirty = true;
+}
+
 
 PolycodeConsole::PolycodeConsole() : UIElement() {
 
@@ -217,7 +254,7 @@ PolycodeConsole::PolycodeConsole() : UIElement() {
 	backtraceWindow = new BackTraceWindow();
 	backtraceSizer->addRightChild(backtraceWindow);
 
-	debugTextInput = consoleWindow->debugTextInput;
+	debugTextInput = consoleWindow->debugTextInput;    
 	consoleTextInput = consoleWindow->consoleTextInput;
 	
 	consoleTextInput->addEventListener(this, Event::COMPLETE_EVENT);
@@ -226,7 +263,7 @@ PolycodeConsole::PolycodeConsole() : UIElement() {
 
 	consoleHistoryPosition = 0;
 	consoleHistoryMaxSize = 15;
-	
+    
 	consoleWindow->clearButton->addEventListener(this, UIEvent::CLICK_EVENT);
 	consoleWindow->hideConsoleButton->addEventListener(this, UIEvent::CLICK_EVENT);
 	
@@ -261,7 +298,7 @@ void PolycodeConsole::handleEvent(Event *event) {
 		}
 	} else if(event->getDispatcher() == consoleWindow->clearButton) {
 		if(event->getEventType() == "UIEvent" && event->getEventCode() == UIEvent::CLICK_EVENT) {
-			debugTextInput->setText("");
+            consoleWindow->clearBuffer();
 		}
 	} else if(event->getDispatcher() == consoleWindow->hideConsoleButton) {
 		globalFrame->hideConsole();
@@ -336,13 +373,14 @@ void PolycodeConsole::_clearBacktraces() {
 }
 
 
-void PolycodeConsole::_print(String msg) {	
-	debugTextInput->setText(debugTextInput->getText()+msg);
-	debugTextInput->getScrollContainer()->setScrollValue(0, 1.0);
+void PolycodeConsole::_print(String msg) {
+    consoleWindow->printToBuffer(msg);
 	printf("%s", msg.c_str());
 }
 
 void PolycodeConsole::Resize(Number width, Number height) {
+	setWidth(width);
+	setHeight(height);	
 	backtraceSizer->Resize(width, height);
 	backtraceSizer->setPosition(0, 0);
 }

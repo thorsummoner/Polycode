@@ -21,11 +21,14 @@
 */
 
 #include "PolyRenderer.h"
+#include "PolyFixedShader.h"
+#include "PolyMaterial.h"
+#include "PolyModule.h"
 #include "PolyMesh.h"
 
 using namespace Polycode;
 
-Renderer::Renderer() : clearColor(0.2f, 0.2f, 0.2f, 0.0), currentTexture(NULL), renderMode(0), lightingEnabled(false), orthoMode(false), xRes(0), yRes(0) {
+Renderer::Renderer() : clearColor(0.2, 0.2, 0.2, 0.0), currentTexture(NULL), lightingEnabled(false), xRes(0), yRes(0) {
 	anisotropy = 0;
 	textureFilteringMode = TEX_FILTERING_LINEAR;
 	currentMaterial = NULL;
@@ -34,18 +37,76 @@ Renderer::Renderer() : clearColor(0.2f, 0.2f, 0.2f, 0.0), currentTexture(NULL), 
 	shadersEnabled = true;
 	currentMaterial = NULL;
 	numLights = 0;
-	numAreaLights = 0;
+	numPointLights = 0;
 	numSpotLights = 0;	
 	exposureLevel = 1;
 	shadersEnabled = true;
 	currentShaderModule = NULL;
-	fov = 45.0;
 	setAmbientColor(0.0,0.0,0.0);
 	cullingFrontFaces = false;
 	scissorEnabled = false;
 	blendNormalAsPremultiplied = false;
-	
+	alphaTestValue = 0.01;
 	doClearBuffer = true;
+    backingResolutionScaleX = 1.0;
+    backingResolutionScaleY = 1.0;
+    overrideMaterial = NULL;
+    renderToGlobalFramebuffer = false;
+    globalColorFramebuffer = NULL;
+    globalDepthFramebuffer = NULL;
+}
+
+void Renderer::setRenderToGlobalFramebuffer(bool val) {
+    
+    if(val == renderToGlobalFramebuffer) {
+        return;
+    }
+    
+    renderToGlobalFramebuffer = val;
+    
+    if(renderToGlobalFramebuffer) {
+        createRenderTextures(&globalColorFramebuffer, &globalDepthFramebuffer, getXRes(), getYRes(), false);
+    } else {
+        delete globalColorFramebuffer;
+        delete globalDepthFramebuffer;
+    }
+}
+
+void Renderer::BeginRender() {
+    if(renderToGlobalFramebuffer) {
+        bindFrameBufferTexture(globalColorFramebuffer);
+        bindFrameBufferTextureDepth(globalDepthFramebuffer);
+    }
+}
+
+void Renderer::EndRender() {
+    if(renderToGlobalFramebuffer) {
+        unbindFramebuffers();
+    }
+}
+
+bool Renderer::getRenderToGlobalFramebuffer() const {
+    return renderToGlobalFramebuffer;
+}
+
+Texture *Renderer::getGlobalColorFramebuffer() const {
+    return globalColorFramebuffer;
+}
+
+Texture *Renderer::getGlobalDepthFramebuffer() const {
+    return globalDepthFramebuffer;
+}
+
+void Renderer::setOverrideMaterial(Material *material) {
+    overrideMaterial = material;
+}
+
+Number Renderer::getBackingResolutionScaleX() {
+    return backingResolutionScaleX;
+}
+
+Number Renderer::getBackingResolutionScaleY() {
+    return backingResolutionScaleY;
 }
 
 Renderer::~Renderer() {
@@ -55,6 +116,25 @@ bool Renderer::Init() {
 	initOSSpecific();
 
 	return true;
+}
+
+void Renderer::pushVertexColor() {
+    vertexColorStack.push(currentVertexColor);
+}
+
+void Renderer::popVertexColor() {
+    currentVertexColor = vertexColorStack.top();
+    vertexColorStack.pop();
+}
+
+void Renderer::multiplyVertexColor(const Color &color) {
+    currentVertexColor = currentVertexColor * color;
+    setVertexColor(currentVertexColor.r, currentVertexColor.g, currentVertexColor.b, currentVertexColor.a);
+}
+
+void Renderer::loadVertexColorIdentity() {
+    currentVertexColor = Color(1.0, 1.0, 1.0, 1.0);
+    setVertexColor(currentVertexColor.r, currentVertexColor.g, currentVertexColor.b, currentVertexColor.a);
 }
 
 void Renderer::enableShaders(bool flag) {
@@ -67,162 +147,46 @@ void Renderer::setCameraMatrix(const Matrix4& matrix) {
 
 void Renderer::clearLights() {
 	numLights = 0;
-	numAreaLights = 0;
+	numPointLights = 0;
 	numSpotLights = 0;	
 	lights.clear();
-	areaLights.clear();
+	pointLights.clear();
 	spotLights.clear();
-//	shadowMapTextures.clear();
 }
-/*
-void Renderer::addShadowMap(Texture *texture) {
-	shadowMapTextures.push_back(texture);
+
+
+void Renderer::bindFrameBufferTexture(Texture *texture) {
+    framebufferStackColor.push(texture);
 }
-*/
+
+void Renderer::bindFrameBufferTextureDepth(Texture *texture) {
+    framebufferStackDepth.push(texture);
+}
+
+void Renderer::unbindFramebuffers() {
+    if(framebufferStackColor.size() > 0) {
+        framebufferStackColor.pop();
+    }
+    if(framebufferStackDepth.size() > 0) {
+        framebufferStackDepth.pop();
+    }
+
+    if(framebufferStackColor.size() > 0) {
+        Texture *rebindTexture = framebufferStackColor.top();
+        framebufferStackColor.pop();
+        bindFrameBufferTexture(rebindTexture);
+    }
+
+    if(framebufferStackDepth.size() > 0) {
+        Texture *rebindTexture = framebufferStackDepth.top();
+        framebufferStackDepth.pop();
+        bindFrameBufferTextureDepth(rebindTexture);
+    }
+    
+}
+
 void Renderer::setExposureLevel(Number level) {
 	exposureLevel = level;
-}
-
-
-bool Renderer::test2DCoordinateInPolygon(Number x, Number y, Matrix4 cameraMatrix, Matrix4 projectionMatrix, Polycode::Polygon *poly, const Matrix4 &matrix, bool ortho, bool testBackfacing, bool billboardMode, bool reverseDirection, Matrix4 *adjustMatrix) {
-
-	Vector3 dirVec;
-	Vector3 origin;
-	
-	if(ortho) {
-		origin = Vector3(((x/(Number)xRes)*orthoSizeX) - (orthoSizeX*0.5), (((yRes-y)/(Number)yRes)*orthoSizeY) - (orthoSizeY*0.5), 0.0);
-		origin = cameraMatrix * origin;
-
-		dirVec = Vector3(0.0, 0.0, -1.0);
-		dirVec = cameraMatrix.rotateVector(dirVec);	
-	} else {
-		dirVec = projectRayFrom2DCoordinate(x, y, cameraMatrix, projectionMatrix);
-		origin = cameraMatrix.getPosition();	
-	}
-	
-	Vector3 hitPoint;
-	
-	Matrix4 fullMatrix = matrix;
-	
-	if(billboardMode) {
-		Matrix4 camInverse = cameraMatrix.Inverse();
-		fullMatrix = fullMatrix * camInverse;
-		
-		fullMatrix.m[0][0] = 1;
-		fullMatrix.m[0][1] = 0;
-		fullMatrix.m[0][2] = 0;
-
-		fullMatrix.m[1][0] = 0;
-		fullMatrix.m[1][1] = 1;
-		fullMatrix.m[1][2] = 0;
-
-		fullMatrix.m[2][0] = 0;
-		fullMatrix.m[2][1] = 0;
-		fullMatrix.m[2][2] = 1;		
-		
-		origin = camInverse * origin;
-		dirVec = camInverse.rotateVector(dirVec);
-	}
-	
-	if(adjustMatrix) {
-			fullMatrix = (*adjustMatrix) * fullMatrix;
-	}	
-		
-	bool retStatus = false;	
-	
-	
-	if(poly->getVertexCount() == 3) {
-	
-		if(reverseDirection) {
-			retStatus = rayTriangleIntersect(origin, dirVec, fullMatrix * (*poly->getVertex(2)), fullMatrix  * (*poly->getVertex(1)), fullMatrix *  (*poly->getVertex(0)), &hitPoint);
-			if(testBackfacing && !retStatus) {
-			retStatus = rayTriangleIntersect(origin, dirVec, fullMatrix * (*poly->getVertex(0)), fullMatrix  * (*poly->getVertex(1)), fullMatrix *  (*poly->getVertex(2)), &hitPoint);
-		
-			}		
-		} else {
-			retStatus = rayTriangleIntersect(origin, dirVec, fullMatrix * (*poly->getVertex(0)), fullMatrix  * (*poly->getVertex(1)), fullMatrix *  (*poly->getVertex(2)), &hitPoint);
-			if(testBackfacing && !retStatus) {
-			retStatus = rayTriangleIntersect(origin, dirVec, fullMatrix * (*poly->getVertex(2)), fullMatrix  * (*poly->getVertex(1)), fullMatrix *  (*poly->getVertex(0)), &hitPoint);
-		
-			}
-		}
-	} else if(poly->getVertexCount() == 4) {
-	
-		if(reverseDirection) {
-		
-		retStatus = (rayTriangleIntersect(origin, dirVec, fullMatrix * (*poly->getVertex(0)), fullMatrix  * (*poly->getVertex(1)), fullMatrix *  (*poly->getVertex(2)), &hitPoint) ||
-				rayTriangleIntersect(origin, dirVec, fullMatrix * (*poly->getVertex(2)), fullMatrix  * (*poly->getVertex(3)), fullMatrix *  (*poly->getVertex(0)), &hitPoint));
-		if(testBackfacing && !retStatus) {
-			retStatus = (rayTriangleIntersect(origin, dirVec, fullMatrix * (*poly->getVertex(2)), fullMatrix  * (*poly->getVertex(1)), fullMatrix *  (*poly->getVertex(0)), &hitPoint) ||
-				rayTriangleIntersect(origin, dirVec, fullMatrix * (*poly->getVertex(0)), fullMatrix  * (*poly->getVertex(3)), fullMatrix *  (*poly->getVertex(2)), &hitPoint));
-		
-		}	
-		
-		
-		} else {
-		
-		retStatus = (rayTriangleIntersect(origin, dirVec, fullMatrix * (*poly->getVertex(2)), fullMatrix  * (*poly->getVertex(1)), fullMatrix *  (*poly->getVertex(0)), &hitPoint) ||
-				rayTriangleIntersect(origin, dirVec, fullMatrix * (*poly->getVertex(0)), fullMatrix  * (*poly->getVertex(3)), fullMatrix *  (*poly->getVertex(2)), &hitPoint));
-		if(testBackfacing && !retStatus) {
-			retStatus = (rayTriangleIntersect(origin, dirVec, fullMatrix * (*poly->getVertex(0)), fullMatrix  * (*poly->getVertex(1)), fullMatrix *  (*poly->getVertex(2)), &hitPoint) ||
-				rayTriangleIntersect(origin, dirVec, fullMatrix * (*poly->getVertex(2)), fullMatrix  * (*poly->getVertex(3)), fullMatrix *  (*poly->getVertex(0)), &hitPoint));
-		
-		}	
-		
-		}			
-	} else {
-		retStatus = false;
-	}
-	
-	return retStatus;
-}
-
-bool Renderer::rayTriangleIntersect(Vector3 ray_origin, Vector3 ray_direction, Vector3 vert0, Vector3 vert1, Vector3 vert2, Vector3 *hitPoint)
-{
-
-//	printf("TESTING RAY\nORIGIN: %f,%f,%f\nDIR: %f,%f,%f\nVERT0: %f,%f,%f\nnVERT1: %f,%f,%f\nnVERT2: %f,%f,%f\n", ray_origin.x, ray_origin.y, ray_origin.z, ray_direction.x, ray_direction.y, ray_direction.z, vert0.x, vert0.y, vert0.z, vert1.x, vert1.y, vert1.z, vert2.x, vert2.y, vert2.z);	
-
-
-	Number t,u,v;
-	t = 0; u = 0; v = 0;
-	
-	Vector3 edge1 = vert1 - vert0;
-	Vector3 edge2 = vert2 - vert0;
-	
-	Vector3 tvec, pvec, qvec;
-	Number det, inv_det;
-	
-	
-	pvec = ray_direction.crossProduct(edge2);
-	det = edge1.dot(pvec);
-	
-	if (det > -0.00001f)
-		return false;
-	
-	inv_det = 1.0f / det;
-	
-	tvec = ray_origin - vert0;
-	
-	u = tvec.dot(pvec) * inv_det;
-	if (u < -0.001f || u > 1.001f)
-		return false;
-	
-	qvec = tvec.crossProduct(edge1);
-	
-	v = ray_direction.dot(qvec) * inv_det;
-	if (v < -0.001f || u + v > 1.001f)
-		return false;
-	
-	t = edge2.dot(qvec) * inv_det;
-	
-	if (t <= 0)
-		return false;
-	
-	hitPoint->x = ray_origin.x+t*ray_direction.x;
-	hitPoint->y = ray_origin.y+t*ray_direction.y;
-	hitPoint->z = ray_origin.z+t*ray_direction.z;	
-	
-	return true;	
 }
 
 void Renderer::addShaderModule(PolycodeShaderModule *module) {
@@ -230,14 +194,12 @@ void Renderer::addShaderModule(PolycodeShaderModule *module) {
 }
 
 void Renderer::sortLights(){
-
-	sorter.basePosition = (getModelviewMatrix()).getPosition();
-	sorter.cameraMatrix = getCameraMatrix().Inverse();	
-	sort (areaLights.begin(), areaLights.end(), sorter);
+    sorter.basePosition = (getModelviewMatrix() * cameraMatrix).getPosition();
+	sort (pointLights.begin(), pointLights.end(), sorter);
 	sort (spotLights.begin(), spotLights.end(), sorter);	
 }
 
-void Renderer::addLight(int lightImportance, Vector3 position, Vector3 direction, int type, Color color, Color specularColor, Number constantAttenuation, Number linearAttenuation, Number quadraticAttenuation, Number intensity, Number spotlightCutoff, Number spotlightExponent, bool shadowsEnabled, Matrix4 *textureMatrix,Texture *shadowMapTexture) {
+void Renderer::addLight(int lightImportance, const Vector3 &position, const Vector3 &direction, int type, const Color &color, const Color &specularColor, Number constantAttenuation, Number linearAttenuation, Number quadraticAttenuation, Number intensity, Number spotlightCutoff, Number spotlightExponent, bool shadowsEnabled, Matrix4 *textureMatrix,Texture *shadowMapTexture) {
 
 	numLights++;
 	
@@ -263,9 +225,9 @@ void Renderer::addLight(int lightImportance, Vector3 position, Vector3 direction
 	info.position = position;
 	lights.push_back(info);
 	switch(type) {
-		case 0: //area light
-			areaLights.push_back(info);
-			numAreaLights++;
+		case 0: //point light
+			pointLights.push_back(info);
+			numPointLights++;
 		break;
 		case 1: //spot light
 			spotLights.push_back(info);			
@@ -284,12 +246,6 @@ void Renderer::setAnisotropyAmount(Number amount) {
 
 const Matrix4& Renderer::getCameraMatrix() const {
 	return cameraMatrix;
-}
-
-void Renderer::setCameraPosition(Vector3 pos) {
-	cameraPosition = pos;
-	pos = pos * -1;
-	this->translate3D(&pos);
 }
 
 void Renderer::enableScissor(bool val) {
@@ -358,21 +314,60 @@ void Renderer::setRendererShaderParams(Shader *shader, ShaderBinding *binding) {
 	for(int i=0; i < shader->expectedParams.size(); i++) {
 		void *dataPtr = getDataPointerForName(shader->expectedParams[i].name);
 		if(dataPtr) {
-			binding->addLocalParam(shader->expectedParams[i].name, dataPtr);
+			binding->addParamPointer(shader->expectedParams[i].type, shader->expectedParams[i].name, dataPtr);
 		}
 	}
 }
 
-void Renderer::pushDataArrayForMesh(Mesh *mesh, int arrayType) {
-	if(mesh->arrayDirtyMap[arrayType] == true || mesh->renderDataArrays[arrayType] == NULL) {
-		if(mesh->renderDataArrays[arrayType] != NULL) {
-			free(mesh->renderDataArrays[arrayType]->arrayPtr);
-			delete mesh->renderDataArrays[arrayType];
-		}
-		mesh->renderDataArrays[arrayType] = createRenderDataArrayForMesh(mesh, arrayType);
-		mesh->arrayDirtyMap[arrayType] = false;
+void Renderer::applyMaterial(Material *material,  ShaderBinding *localOptions,unsigned int shaderIndex, bool forceMaterial) {
+    
+    if(overrideMaterial) {
+        if(!forceMaterial) {
+            material = overrideMaterial;
+        }
+    }
+    
+	if(!material->getShader(shaderIndex) || !shadersEnabled) {
+		setTexture(NULL);
+		return;
 	}
-	pushRenderDataArray(mesh->renderDataArrays[arrayType]);
+	
+	FixedShaderBinding *fBinding;
+    
+    Shader *shader = material->getShader(shaderIndex);
+	if(shader->numPointLights + shader->numSpotLights > 0) {
+		sortLights();
+	}
+	
+	switch(material->getShader(shaderIndex)->getType()) {
+		case Shader::FIXED_SHADER:
+			fBinding = (FixedShaderBinding*)material->getShaderBinding(shaderIndex);
+			setTexture(fBinding->getDiffuseTexture());
+            break;
+		case Shader::MODULE_SHADER:
+			currentMaterial = material;
+			if(material->shaderModule == NULL) {
+				for(int m=0; m < shaderModules.size(); m++) {
+					PolycodeShaderModule *shaderModule = shaderModules[m];
+					if(shaderModule->hasShader(material->getShader(shaderIndex))) {
+						material->shaderModule = (void*)shaderModule;
+					}
+				}
+			} else {
+				PolycodeShaderModule *shaderModule = (PolycodeShaderModule*)material->shaderModule;
+				shaderModule->applyShaderMaterial(this, material, localOptions, shaderIndex);
+				currentShaderModule = shaderModule;
+			}
+            break;
+	}
+	
+	setBlendingMode(material->blendingMode);
+    setWireframePolygonMode(material->wireframe);
+}
+
+void Renderer::setBackingResolutionScale(Number xScale, Number yScale) {
+    backingResolutionScaleX = xScale;
+    backingResolutionScaleY = yScale;
 }
 
 int Renderer::getXRes() {
@@ -395,31 +390,11 @@ void Renderer::setClearColor(Color color) {
 	setClearColor(color.r, color.g, color.b, color.a);
 }
 
-void Renderer::setRenderMode(int newRenderMode) {
-	renderMode = newRenderMode;
-}
-
 void Renderer::setTextureFilteringMode(int mode) {
 	textureFilteringMode = mode;
 }
 
-int Renderer::getRenderMode() {
-	return renderMode;
-}
-
-void Renderer::setFOV(Number fov) {
-	this->fov = fov;
-	resetViewport();
-}
-
 void Renderer::setViewportSize(int w, int h) {
-	viewportWidth = w;
-	viewportHeight = h;
-	resetViewport();
-}
-
-void Renderer::setViewportSizeAndFOV(int w, int h, Number fov) {
-	this->fov = fov;
 	viewportWidth = w;
 	viewportHeight = h;
 	resetViewport();

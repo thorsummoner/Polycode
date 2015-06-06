@@ -51,19 +51,19 @@ void PolycodeRunner::runThread() {
 #if defined(__APPLE__) && defined(__MACH__)
 	String command = "../MacOS/PolycodePlayer";	
 	String inFolder = polycodeBasePath+"/Standalone/Player/PolycodePlayer.app/Contents/Resources";
-	String args = polyappPath;
+	String args = "\""+polyappPath+"\"";
 #elif defined _WINDOWS
-	String command = polycodeBasePath+"/Standalone/Player/PolycodePlayer.exe";
-	String args = polyappPath;
+	String command = "\""+polycodeBasePath+"/Standalone/Player/PolycodePlayer.exe\"";
+	String args = "\""+polyappPath+"\"";
 	String inFolder = polycodeBasePath+"/Standalone/Player";
 #else
 	String command = "./PolycodePlayer";	
 	String inFolder = polycodeBasePath+"/Standalone/Player";
-	String args = polyappPath;
+	String args = "\""+polyappPath+"\"";
 #endif
 
 	String ret = CoreServices::getInstance()->getCore()->executeExternalCommand(command, args, inFolder);
-	CoreServices::getInstance()->getCore()->removeDiskItem(polyappPath);	
+	CoreServices::getInstance()->getCore()->removeDiskItem(polyappPath);
 }
 
 PolycodeToolLauncher::PolycodeToolLauncher() {
@@ -113,8 +113,75 @@ void PolycodeToolLauncher::buildProject(PolycodeProject *project, String destina
 
 }
 
+String PolycodeToolLauncher::importAssets(String sourceFile, String inFolder, bool addMeshes, String prefix, bool swapZY, bool generateNormals, bool generateTangents, bool listOnly, bool writeNormals, bool writeTangents, bool writeColors, bool writeBoneWeights, bool writeUVs, bool writeSecondaryUVs, bool exportScene, bool generateMaterialFile, bool overrideMaterials, String materialOverrideName, bool specifyBaseAssetPath, String baseAssetPath) {
+
+	String ret;
+	String polycodeBasePath = CoreServices::getInstance()->getCore()->getDefaultWorkingDirectory();
+	
+	String args = "\""+sourceFile+"\"";
+	if(listOnly) {
+		args = "-l "+args;
+	}		
+	if(addMeshes) {
+		args = "-a "+args;
+	}
+	if(swapZY) {
+		args = "-s "+args;
+	}
+	if(generateNormals) {
+		args = "-m "+args;
+	}
+	if(generateTangents) {
+		args = "-t "+args;
+	}
+    if(writeNormals) {
+		args = "-n "+args;
+    }
+    if(writeTangents) {
+		args = "-g "+args;
+    }
+    if(writeColors) {
+		args = "-c "+args;
+    }
+    if(writeBoneWeights) {
+		args = "-w "+args;
+    }
+    if(writeUVs) {
+		args = "-u "+args;
+    }
+    if(writeSecondaryUVs) {
+		args = "-v "+args;
+    }
+    if(exportScene) {
+		args = "-e "+args;
+    }
+    if(generateMaterialFile) {
+		args = "-f "+args;
+    }
+    if(overrideMaterials) {
+		args = "-o \""+materialOverrideName+"\" "+args;
+    }
+    if(specifyBaseAssetPath) {
+		args = "-x \""+baseAssetPath+"\" "+args;        
+    }
+	if(prefix != "") {
+		args = "-p \""+prefix+"\" "+args;
+	}
+    
+
+	
+#ifdef _WINDOWS
+	String command = "\""+polycodeBasePath+"/Standalone/Bin/polyimport.exe\"";
+	ret = CoreServices::getInstance()->getCore()->executeExternalCommand(command, args, inFolder);
+#else
+	String command = polycodeBasePath+"/Standalone/Bin/polyimport";
+	ret = CoreServices::getInstance()->getCore()->executeExternalCommand(command, args, inFolder);
+#endif
+	return ret;
+}
+
 void PolycodeToolLauncher::openExternalEditor(String app, String file, String inFolder) {
-	GenericRunner *runner = new GenericRunner(app, "\""+file+"\"", inFolder);
+	GenericRunner *runner = new GenericRunner("\"" + app + "\"", "\"" + file + "\"", "\"" + inFolder + "\"");
 	CoreServices::getInstance()->getCore()->createThread(runner);
 }
 

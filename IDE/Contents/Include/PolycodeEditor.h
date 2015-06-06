@@ -24,12 +24,15 @@
 
 #include "Polycode.h"
 #include "OSBasics.h"
+#include "PolyUIElement.h"
 #include "PolycodeProject.h"
 #include "PolycodeClipboard.h"
 
 #define MAX_EDITOR_UNDO_ACTIONS	40
 
 using namespace Polycode;
+
+class EditorHolder;
 
 class PolycodeEditorActionData {
 	public:
@@ -39,7 +42,10 @@ class PolycodeEditorActionData {
 
 class PolycodeEditorAction  {
 	public:
-		PolycodeEditorAction(){}
+		PolycodeEditorAction(){
+            beforeData = NULL;
+            afterData = NULL;
+        }
 		~PolycodeEditorAction() {}
 		
 		void deleteData() {
@@ -52,7 +58,8 @@ class PolycodeEditorAction  {
 		PolycodeEditorActionData *afterData;		
 };
 
-class PolycodeEditor : public ScreenEntity, public ClipboardProvider { 
+
+class PolycodeEditor : public UIElement, public ClipboardProvider {
 public:
 	PolycodeEditor(bool _isReadOnly);
 	virtual ~PolycodeEditor();
@@ -62,7 +69,8 @@ public:
 	
 	virtual void handleEvent(Event *event);
 
-	virtual void Activate() {};	
+	virtual void Activate() {};
+   	virtual void Deactivate() {};
 	virtual void saveFile(){};
 	
 	void didAction(String actionName, PolycodeEditorActionData *beforeData, PolycodeEditorActionData *afterData, bool setFileChanged = true);
@@ -70,8 +78,12 @@ public:
 	
 	virtual String Copy(void **data) { return ""; }
 	virtual void Paste(void *data, String clipboardType) {}
-
+	virtual void selectAll() {}
+    
 	virtual void handleDroppedFile(OSFileEntry file, Number x, Number y) {};
+	
+	virtual ObjectEntry *getEditorConfig() { return NULL; }
+	virtual void applyEditorConfig(ObjectEntry *configEntry) {}
 	
 	void setFilePath(String newPath);
 	String getFilePath() { return filePath; }
@@ -85,9 +97,13 @@ public:
 	void setHasChanges(bool newVal);
 	
 	PolycodeProject *parentProject;
+	
+	void setEditorHolder(EditorHolder *holder);
+	EditorHolder *getEditorHolder();
 		
 protected:
 
+	EditorHolder *editorHolder;
 	bool _hasChanges;
 
 	String filePath;

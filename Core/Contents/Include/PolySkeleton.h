@@ -27,7 +27,8 @@ THE SOFTWARE.
 #include "PolyColor.h"
 #include "PolyVector3.h"
 #include "PolyQuaternion.h"
-#include "PolySceneEntity.h"
+#include "PolyQuaternionCurve.h"
+#include "PolyEntity.h"
 #include <vector>
 
 namespace Polycode {
@@ -41,9 +42,11 @@ namespace Polycode {
 		public:
 			BoneTrack(Bone *bone, Number length);
 			~BoneTrack();
+        
 			void Play(bool once=false);
 			void Stop();
-			void Update();
+			void Update(Number elapsed);
+            void Reset();
 		
 			void setSpeed(Number speed);
 			
@@ -58,32 +61,21 @@ namespace Polycode {
 			BezierCurve *LocY;
 			BezierCurve *LocZ;
 			
-			Vector3 LocXVec;
-			Vector3 LocYVec;
-			Vector3 LocZVec;						
-
-			Vector3 ScaleXVec;
-			Vector3 ScaleYVec;
-			Vector3 ScaleZVec;						
-		
-		
+			Vector3 position;
+            Vector3 scale;
 			Quaternion boneQuat;
-			QuaternionTween *quatTween;
-			
-			Vector3 QuatWVec;
-			Vector3 QuatXVec;
-			Vector3 QuatYVec;			
-			Vector3 QuatZVec;		
-		
+            QuaternionCurve *quatCurve;
+        
+            Number weight;
 			
 		protected:
 		
 			Number length;
-		
-			bool initialized;
-		
+            Number speed;
+            bool paused;
+            Number time;
 			Bone *targetBone;
-			std::vector <BezierPathTween*> pathTweens;
+            bool playOnce;
 		
 	};
 
@@ -115,6 +107,9 @@ namespace Polycode {
 			* Stops the animation.
 			*/			
 			void Stop();
+        
+            void Reset();
+        
 			void Update();
 
 			/**
@@ -123,8 +118,15 @@ namespace Polycode {
 			*/					
 			void setSpeed(Number speed);
 			
+            void setWeight(Number newWeight);
+            Number getWeight() const;
+        
+            bool isPlaying() const;
+        
 		protected:
 			
+            Number weight;
+            bool playing;
 			String name;
 			Number duration;
 			std::vector<BoneTrack*> boneTracks;
@@ -133,7 +135,7 @@ namespace Polycode {
 	/**
 	* 3D skeleton. Skeletons are applied to scene meshes and can be animated with loaded animations.
 	*/
-	class _PolyExport Skeleton : public SceneEntity {
+	class _PolyExport Skeleton : public Entity {
 		public:
 		
 			/**
@@ -165,10 +167,18 @@ namespace Polycode {
 			* @param animName Name of animation to play.
 			* @param once If true, will only play the animation once.
 			*/
-			void playAnimation(const String& animName, bool once = false);
-						
-			void playAnimationByIndex(int index, bool once = false);		
+			void playAnimationByName(const String& animName, Number weight = 1.0, bool once = false, bool restartIfPlaying = false);
 			
+
+            void playAnimation(SkeletonAnimation *animation, Number weight = 1.0, bool once = false, bool restartIfPlaying = false);
+        
+            void setBaseAnimationByName(const String &animName);
+            void setBaseAnimation(SkeletonAnimation *animation);
+        
+            void stopAllAnimations();
+        
+            SkeletonAnimation *getBaseAnimation();
+        
 			/**
 			* Loads in a new animation from a file and adds it to the skeleton.
 			* @param name Name of the new animation.
@@ -181,6 +191,11 @@ namespace Polycode {
 			* @param Name of animation to return.
 			*/
 			SkeletonAnimation *getAnimation(const String& name) const;
+
+        
+            void stopAnimationByName(const String &name);
+            void stopAnimation(SkeletonAnimation *animation);
+        
 			void Update();
 			
 			/**
@@ -194,16 +209,7 @@ namespace Polycode {
 			* @param val If true, bones will be rendered, if false, they will not.
 			*/
 			void bonesVisible(bool val);
-			
-			/**
-			* Enables labels with bone names to be rendered. See SceneLabel for details on the parameters.
-			* @param labelFont Font to use
-			* @param size Size of font.
-			* @param scale Scale of font.
-			* @param labelColor Color of the label.
-			*/
-			void enableBoneLabels(const String& labelFont, Number size, Number scale, Color labelColor);
-					
+								
 			/**
 			* Returns the number of bones in the skeleton
 			*/
@@ -213,18 +219,19 @@ namespace Polycode {
 			* Returns a bone at the specified index.
 			* @param index Bone index.
 			*/
-			Bone *getBone(int index) const;
+			Bone *getBone(unsigned int index) const;
 		
-			/**
-			* Returns the current animation.
-			*/
-			SkeletonAnimation *getCurrentAnimation() const { return currentAnimation; }
-		
+            void addBone(Bone *bone);
+            void removeBone(Bone *bone);
+        
+            unsigned int getBoneIndexByBone(Bone *bone);
+        
 		protected:
 		
-			SceneEntity *bonesEntity;
+			Entity *bonesEntity;
 		
-			SkeletonAnimation *currentAnimation;
+            SkeletonAnimation *baseAnimation;
+            std::vector<SkeletonAnimation*> playingAnimations;
 			std::vector<Bone*> bones;
 			std::vector<SkeletonAnimation*> animations;
 	};

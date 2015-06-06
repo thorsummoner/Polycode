@@ -3,6 +3,8 @@
 #include "PolyLabel.h"
 #include <PolyCoreServices.h>
 #include <PolyCore.h>
+#include <PolyConfig.h>
+#include <PolyRenderer.h>
 
 using namespace Polycode;
 
@@ -37,23 +39,24 @@ bool UIMenuBarEntryItem::checkShortCut(PolyKEY shortCut) {
 
 UIMenuBarEntry::UIMenuBarEntry(String name): UIElement() {
 	
-	label = new ScreenLabel(name, 14, "sans");
+	label = new SceneLabel(name, 14, "sans");
 	setWidth(label->getLabel()->getTextWidth() + 20);
-	bg = new ScreenShape(ScreenShape::SHAPE_RECT, width, 25);
-	bg->setPositionMode(ScreenEntity::POSITION_TOPLEFT);
+	label->setBlendingMode(Renderer::BLEND_MODE_NORMAL);
+	bg = new UIRect(getWidth(), 25);
+	bg->setAnchorPoint(-1.0, -1.0, 0.0);
 	addChild(bg);
-	bg->color.setColorHex(0xce5a1600);
 	bg->processInputEvents = true;
+	bg->color.setColorHexFromString(CoreServices::getInstance()->getConfig()->getStringValue("Polycode", "uiMenuBarBgColor"));
 	addChild(label);
 	label->setPosition(10, 5);
 }
 
 void UIMenuBarEntry::Select() {
-	bg->color.setColorHex(0xce5a16ff);
+	bg->color.setColorHexFromString(CoreServices::getInstance()->getConfig()->getStringValue("Polycode", "uiAccentColor"));
 }
 
 void UIMenuBarEntry::Deselect() {
-	bg->color.setColorHex(0xce5a1600);
+	bg->color.setColorHexFromString(CoreServices::getInstance()->getConfig()->getStringValue("Polycode", "uiMenuBarBgColor"));
 }
 
 void UIMenuBarEntry::addItem(String name, String code, PolyKEY shortCut1, PolyKEY shortCut2) {
@@ -66,13 +69,16 @@ UIMenuBarEntry::~UIMenuBarEntry() {
 }
 
 UIMenuBar::UIMenuBar(int width, UIGlobalMenu *globalMenu) : UIElement() {
+	Config *conf = CoreServices::getInstance()->getConfig();
 
 	this->globalMenu = globalMenu;
 
-	bgShape = new ScreenShape(ScreenShape::SHAPE_RECT, width, 25);
+	bgShape = new UIRect(width, 25);
 	addChild(bgShape);
-	bgShape->setColor(0.0, 0.0, 0.0, 1.0);
-	bgShape->setPositionMode(ScreenEntity::POSITION_TOPLEFT);
+	Color bgColor = new Color();
+	bgColor.setColorHexFromString(conf->getStringValue("Polycode", "uiMenuBarBgColor"));
+	bgShape->setColor(bgColor);
+	bgShape->setAnchorPoint(-1.0, -1.0, 0.0);
 	entryOffset = 0;
 
 	currentEntry = NULL;
@@ -88,7 +94,7 @@ UIMenuBarEntry *UIMenuBar::addMenuBarEntry(String name) {
 	entries.push_back(newEntry);
 	addChild(newEntry);
 	newEntry->setPosition(entryOffset, 0);
-	entryOffset += newEntry->width;
+	entryOffset += newEntry->getWidth();
 
 	newEntry->bg->addEventListener(this, InputEvent::EVENT_MOUSEDOWN);
 	newEntry->bg->addEventListener(this, InputEvent::EVENT_MOUSEUP);
@@ -99,7 +105,7 @@ UIMenuBarEntry *UIMenuBar::addMenuBarEntry(String name) {
 }
 
 void UIMenuBar::showMenuForEntry(UIMenuBarEntry *entry) {
-	dropMenu = globalMenu->showMenu(entry->position.x, 25, 130);
+	dropMenu = globalMenu->showMenu(entry->getPosition().x, 25, 130);
 	
 	dropMenu->addEventListener(this, UIEvent::OK_EVENT);
 	dropMenu->addEventListener(this, UIEvent::CANCEL_EVENT);
@@ -178,5 +184,5 @@ UIMenuBar::~UIMenuBar() {
 }
 
 void UIMenuBar::Resize(Number width, Number height) {
-	bgShape->setShapeSize(width, 25);
+	bgShape->Resize(width, 25);
 }

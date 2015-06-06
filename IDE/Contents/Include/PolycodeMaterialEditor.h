@@ -45,7 +45,6 @@ public:
 	String name;
 };
 
-
 class MaterialPreviewBox : public UIElement {
 	public:
 		MaterialPreviewBox();
@@ -60,15 +59,22 @@ class MaterialPreviewBox : public UIElement {
 		SceneLight *mainLight;
 		SceneLight *secondLight;		
 		SceneRenderTexture *renderTexture;
-		ScreenShape *previewShape;
+		UIRect *previewShape;
 		
 		std::vector<UIImageButton*> shapeSwitches;
 		std::vector<ScenePrimitive*> shapePrimitives;
-		ScreenImage *shapeSelector;
+		UIImage *shapeSelector;
 		
-		ScreenEntity *previewBase;		
+		Entity *previewBase;		
 		ScenePrimitive *previewPrimitive;	
 		Material *currentMaterial;					
+};
+
+class MaterialPreviewProp : public PropProp {
+	public:
+		MaterialPreviewProp();		
+		void setPropWidth(Number width);
+		MaterialPreviewBox *previewBox;
 };
 
 class PostPreviewBox : public UIElement {
@@ -83,11 +89,11 @@ class PostPreviewBox : public UIElement {
 			
 		Scene *previewScene;
 		SceneRenderTexture *renderTexture;
-		ScreenShape *previewShape;				
-		ScreenEntity *previewBase;		
+		UIRect *previewShape;				
+		Entity *previewBase;		
 		ScenePrimitive *previewPrimitive;	
 		Material *currentMaterial;	
-		ScreenShape *headerBg;
+		UIRect *headerBg;
 				
 		Number spinValue;
 		
@@ -131,7 +137,7 @@ class MaterialBrowser : public UIElement {
 														
 	protected:
 	
-		ScreenShape *headerBg;
+		UIRect *headerBg;
 		UITree *shadersNode;
 		UITree *materialsNode;
 		UITree *cubemapsNode;
@@ -142,17 +148,20 @@ class MaterialBrowser : public UIElement {
 
 class CubemapEditorPane : public UIElement {
 	public:
-		CubemapEditorPane();
+		CubemapEditorPane(ResourcePool *resourcePool);
 		~CubemapEditorPane();
 		void Resize(Number width, Number height);
 		void setCubemap(Cubemap *cubemap);
 		void handleEvent(Event *event);
 		Cubemap *currentCubemap;		
 		
+        void Activate();
+        void Deactivate();
+    
 	protected:
 	
 		PropList *propList;
-		ScreenShape *headerBg;
+		UIRect *headerBg;
 		
 		TextureProp *yPosTexture;
 		TextureProp *yNegTexture;
@@ -168,18 +177,21 @@ class CubemapEditorPane : public UIElement {
 
 class PostEditorPane : public UIElement {
 	public:
-		PostEditorPane();
+		PostEditorPane(ResourcePool *resourcePool);
 		~PostEditorPane();
 		void Resize(Number width, Number height);
 		void setMaterial(Material *material);
 		void handleEvent(Event *event);
 		Material *currentMaterial;	
 		
+        void Activate();
+        void Deactivate();
+    
 		void adjustPreview();
 		
 		protected:
 		
-		ScreenShape *headerBgBottom;
+		UIRect *headerBgBottom;
 
 		PropList *propList;				
 		PropSheet *baseProps;
@@ -200,15 +212,12 @@ class PostEditorPane : public UIElement {
 		BoolProp *fp16Prop;
 		
 		PostPreviewBox *postPreview;
-		
-		Screen *previewScreen;
-		
 					
 };
 
 class ShaderEditorPane : public UIElement {
 	public:
-		ShaderEditorPane();
+		ShaderEditorPane(ResourcePool *resourcePool);
 		~ShaderEditorPane();
 		void Resize(Number width, Number height);
 		void setShader(Shader *shader);
@@ -222,13 +231,13 @@ class ShaderEditorPane : public UIElement {
 			
 	protected:
 	
-		
+        ResourcePool *resourcePool;
 		bool changingShader;
 
 		bool choosingVertexProgram;
 	
 		PropList *propList;
-		ScreenShape *headerBg;
+		UIRect *headerBg;
 		
 		ComboProp *vertexProgramProp;
 		ComboProp *fragmentProgramProp;
@@ -237,14 +246,19 @@ class ShaderEditorPane : public UIElement {
 		BoolProp *screenShaderProp;
 	
 		
-		NumberProp *areaLightsProp;
+		NumberProp *pointLightsProp;
 		NumberProp *spotLightsProp;		
 };
+
 
 class MaterialEditorPane : public UIElement {
 	public:
 		MaterialEditorPane();
 		~MaterialEditorPane();
+    
+        void Activate();
+        void Deactivate();
+    
 		
 		void setMaterial(Material *material);
 		void handleEvent(Event *event);
@@ -258,7 +272,7 @@ class MaterialEditorPane : public UIElement {
 		MaterialPreviewBox *materialPreview;
 		bool changingMaterial;
 	
-		ScreenShape *headerBg;			
+		UIRect *headerBg;			
 		
 		PropList *propList;
 		
@@ -272,9 +286,12 @@ class MaterialEditorPane : public UIElement {
 
 class MaterialMainWindow : public UIElement {
 	public:
-	MaterialMainWindow();
-	~MaterialMainWindow(){}
+	MaterialMainWindow(ResourcePool *resourcePool);
+	~MaterialMainWindow();
 	
+    void Activate();
+    void Deactivate();
+    
 	void Resize(Number width, Number height);
 	
 	MaterialEditorPane *materialPane;
@@ -293,15 +310,18 @@ class PolycodeMaterialEditor : public PolycodeEditor {
 	bool openFile(OSFileEntry filePath);
 	void Resize(int x, int y);
 	
+    void Activate();
+    void Deactivate();
 	
-	void handleEvent(Event *event);	
+	void handleEvent(Event *event);
 	void saveFile();
 	void saveMaterials(ObjectEntry *materialsEntry, std::vector<Material*> materials);
 	
-	String createStringValue(unsigned int type, void *value);
+	static String createStringValue(unsigned int type, void *value);
 	
 	protected:
-		ScreenImage *editorImage;
+    
+        ResourcePool *resourcePool;
 		
 		MaterialBrowser *materialBrowser;
 		UIHSizer *mainSizer;

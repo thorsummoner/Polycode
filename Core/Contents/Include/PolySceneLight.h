@@ -23,7 +23,7 @@ THE SOFTWARE.
 
 #pragma once
 #include "PolyGlobals.h"
-#include "PolySceneEntity.h"
+#include "PolyEntity.h"
 
 namespace Polycode {
 
@@ -34,14 +34,14 @@ namespace Polycode {
 //	class ScenePrimitive;
 	
 	/**
-	* 3D light source. Lights can be area or spot lights and can be set to different colors. 
+	* 3D light source. Lights can be point or spot lights and can be set to different colors. 
 	*/
-	class _PolyExport SceneLight : public SceneEntity {
+	class _PolyExport SceneLight : public Entity {
 		public:
 		
 			/**
 			* Constructs a light with parameters.
-			* @param type Type of light to create. Can be SceneLight::AREA_LIGHT or SceneLight::SPOT_LIGHT
+			* @param type Type of light to create. Can be SceneLight::POINT_LIGHT or SceneLight::SPOT_LIGHT
 			* @param parentScene Scene to light.
 			* @param intensity Light color intensity
 			* @param constantAttenuation Constant falloff attenuation value	
@@ -86,7 +86,7 @@ namespace Polycode {
 
 			const Matrix4& getLightViewMatrix() const;
 			
-			static const int AREA_LIGHT = 0;
+			static const int POINT_LIGHT = 0;
 			static const int SPOT_LIGHT = 1;
 			
 			Texture *getZBufferTexture() const;
@@ -144,20 +144,18 @@ namespace Polycode {
 			*/
 			void setSpotlightProperties(Number spotlightCutoff, Number spotlightExponent) {
 				this->spotlightCutoff = spotlightCutoff;
-				Number cosVal = cos(spotlightCutoff*(PI/180.0));
-				this->spotlightExponent = cosVal - (0.02*spotlightExponent);				
+                this->spotlightExponent = spotlightExponent;
 			}
 			
 			Number getSpotlightCutoff() const { return spotlightCutoff; }
 			Number getSpotlightExponent() const { return spotlightExponent; }
-						
 			
 			/**
 			* If this is called with 'true', the light will generate a shadow map.
 			* @param val If set to true, enables this light to cast shadows.
 			* @param resolution Resolution of the shadow map. (defaults to 256x256).
 			*/
-			void enableShadows(bool val, Number resolution=256);
+			void enableShadows(bool val, unsigned int resolution=256);
 			
 			/**
 			* This sets the shadow map field of view. The larger the field of view, the more of the scene it encompasses, but the more quality it loses.
@@ -165,6 +163,13 @@ namespace Polycode {
 			*/
 			void setShadowMapFOV(Number fov);
 		
+            /**
+             * Returns the light's shadow map field of view.
+             */
+            Number getShadowMapFOV() const;
+        
+            unsigned int getShadowMapResolution() const;
+        
 			/**
 			* Returns true if shadows are enabled.
 			*/
@@ -174,17 +179,20 @@ namespace Polycode {
 			* Returns the light type.
 			*/
 			int getLightType() const { return type; }
-		
-			/**
-			* If set to true, draws a wireframe primitive visualizing the light.
-			*/
-			void enableDebugDraw(bool val);
 			
 			void setLightImportance(int newImportance);
 			int getLightImportance() const;
+        
+            void setLightType(int lightType);
 		
-			SceneEntity *lightShape;
-			
+            virtual Entity *Clone(bool deepClone, bool ignoreEditorOnly) const;
+            virtual void applyClone(Entity *clone, bool deepClone, bool ignoreEditorOnly) const;
+        
+            Scene *getParentScene() const;
+            void setParentScene(Scene *scene);
+        
+            Camera *getSpotlightCamera();
+        
 		protected:
 		
 			Number spotlightExponent;
@@ -206,7 +214,7 @@ namespace Polycode {
 			
 			Matrix4 lightViewMatrix;
 		
-			Number shadowMapRes;
+			unsigned int shadowMapRes;
 			Number shadowMapFOV;	
 			bool shadowsEnabled;
 		

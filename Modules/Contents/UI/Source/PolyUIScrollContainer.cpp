@@ -29,9 +29,9 @@
 
 using namespace Polycode;
 
-UIScrollContainer::UIScrollContainer(ScreenEntity *scrolledEntity, bool hScroll, bool vScroll, Number width, Number height) : UIElement() {
+UIScrollContainer::UIScrollContainer(Entity *scrolledEntity, bool hScroll, bool vScroll, Number width, Number height) : UIElement() {
 	
-	scrolledEntity->setPositionMode(ScreenEntity::POSITION_TOPLEFT);
+	scrolledEntity->setAnchorPoint(-1.0, -1.0, 0.0);
 	
 	scrolledEntity->rebuildTransformMatrix();
 	Config *conf = CoreServices::getInstance()->getConfig();
@@ -40,9 +40,8 @@ UIScrollContainer::UIScrollContainer(ScreenEntity *scrolledEntity, bool hScroll,
 	hasVScroll = vScroll;	
 	
 	
-	this->width = width;
-	this->height = height;
-	setHitbox(width, height);
+	setWidth(width);
+	setHeight(height);
 	
 	Number uiScrollPanePadding = conf->getNumericValue("Polycode", "uiScrollPanePadding");			
 	
@@ -74,28 +73,32 @@ UIScrollContainer::UIScrollContainer(ScreenEntity *scrolledEntity, bool hScroll,
 	Resize(width, height);	
 	
 	processInputEvents = true;
+	
+	addEventListener(this, InputEvent::EVENT_MOUSEWHEEL_DOWN);
+	addEventListener(this, InputEvent::EVENT_MOUSEWHEEL_UP);	
 }
 
 void UIScrollContainer::Resize(Number width, Number height) {
-	this->width = width;
-	this->height = height;
-	setHitbox(width, height);
+	setWidth(width);
+	setHeight(height);
 	
-	
+	hScrollBar->Resize(width);	
 	vScrollBar->Resize(height);
+
 	setContentSize(contentWidth, contentHeight);
 	vScrollBar->setPosition(width-vScrollBar->getWidth(), 0);
+	hScrollBar->setPosition(0, height-hScrollBar->getHeight());
 	
 	matrixDirty = true;
 	
 }
 
-void UIScrollContainer::onMouseWheelUp(Number x, Number y) {
+void UIScrollContainer::_onMouseWheelUp() {
 	if(vScrollBar->enabled)
 		vScrollBar->scrollUpOneTick();
 }
 
-void UIScrollContainer::onMouseWheelDown(Number x, Number y) {
+void UIScrollContainer::_onMouseWheelDown() {
 	if(vScrollBar->enabled)
 		vScrollBar->scrollDownOneTick();
 }
@@ -112,27 +115,39 @@ Number UIScrollContainer::getVScrollWidth() {
 	}
 }
 
+UIVScrollBar *UIScrollContainer::getVScrollBar() { return vScrollBar; }
+
+UIHScrollBar *UIScrollContainer::getHScrollBar() { return hScrollBar; }
+
 void UIScrollContainer::setContentSize(Number newContentWidth, Number newContentHeight) {
-	
+    
+    if(newContentWidth < 1.0)
+        newContentWidth = 1.0;
+    if(newContentHeight < 1.0)
+        newContentHeight = 1.0;
+
+
 	contentHeight = newContentHeight;
 	contentWidth = newContentWidth;
 	
-	vScrollBar->setHandleRatio(height / newContentHeight);	
-	hScrollBar->setHandleRatio(width / newContentWidth);	
+	vScrollBar->setHandleRatio(getHeight() / newContentHeight);	
+	hScrollBar->setHandleRatio(getWidth() / newContentWidth);	
 	
 	if(hasVScroll) {
-		if((height / newContentHeight) >= 1) {
+		if((getHeight() / newContentHeight) >= 1) {
 			vScrollBar->enabled = false;
 			vScrollBar->scrollTo(0);
+            scrollChild->setPositionY(0.0);
 		} else {
 			vScrollBar->enabled = true;		
 		}
 	}
 	
 	if(hasHScroll) {
-		if((width / newContentWidth) >= 1) {
+		if((getWidth() / newContentWidth) >= 1) {
 			hScrollBar->enabled = false;
-			hScrollBar->scrollTo(0);			
+			hScrollBar->scrollTo(0);
+            scrollChild->setPositionX(0.0);
 		} else {
 			hScrollBar->enabled = true;		
 		}
@@ -152,7 +167,10 @@ void UIScrollContainer::setScrollValue(Number xScroll, Number yScroll) {
 
 		
 	hScrollBar->scrollTo(xScroll);
-	vScrollBar->scrollTo(yScroll);	
+	vScrollBar->scrollTo(yScroll);
+    
+    vScrollBar->dispatchEvent(new Event(), Event::CHANGE_EVENT);
+    hScrollBar->dispatchEvent(new Event(), Event::CHANGE_EVENT);
 }
 
 void UIScrollContainer::scrollVertical(Number amount) {
@@ -165,26 +183,37 @@ void UIScrollContainer::scrollHorizontal(Number amount) {
 
 
 void UIScrollContainer::Update() {
-	Vector2 pos = getScreenPosition();
-	scissorBox.setRect(pos.x, pos.y, width, height);
+	Vector2 pos = getScreenPositionForMainCamera();
+	scissorBox.setRect(pos.x, pos.y, getWidth(), getHeight());
 }
 
 void UIScrollContainer::handleEvent(Event *event) {
+
+	if(event->getDispatcher() == this) {
+		if(event->getEventCode() == InputEvent::EVENT_MOUSEWHEEL_UP) {
+			_onMouseWheelUp();
+		} else if(event->getEventCode() == InputEvent::EVENT_MOUSEWHEEL_DOWN) {
+			_onMouseWheelDown();		
+		}
+	}
+	
 	if(event->getDispatcher() == vScrollBar) {
 		if(event->getEventCode() == Event::CHANGE_EVENT) {
-			scrollChild->setPositionY(floor(((-contentHeight+height) )*vScrollBar->getScrollValue()));
-			if(scrollChild->getPosition().y > 0)
+			scrollChild->setPositionY(floor(((-contentHeight+getHeight()) )*vScrollBar->getScrollValue()));
+            if(scrollChild->getPosition().y > 0) {
 				scrollChild->setPositionY(0);
-				dispatchEvent(new Event(), Event::CHANGE_EVENT);
+            }
+            dispatchEvent(new Event(), Event::CHANGE_EVENT);
 		}
 	}
 	
 	if(event->getDispatcher() == hScrollBar) {
 		if(event->getEventCode() == Event::CHANGE_EVENT) {
-			scrollChild->setPositionX(floor(((-contentWidth+width) )*hScrollBar->getScrollValue()));
-			if(scrollChild->getPosition().x > 0)
+			scrollChild->setPositionX(floor(((-contentWidth+getWidth()) )*hScrollBar->getScrollValue()));
+            if(scrollChild->getPosition().x > 0) {
 				scrollChild->setPositionX(0);
-				dispatchEvent(new Event(), Event::CHANGE_EVENT);			
+            }
+            dispatchEvent(new Event(), Event::CHANGE_EVENT);
 		}
 	}
 	

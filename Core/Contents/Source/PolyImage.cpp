@@ -28,6 +28,10 @@
 #include "OSBasics.h"
 #include "PolyPerlin.h"
 #include <algorithm>
+#include <stdlib.h>
+#include "rgbe.h"
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
 
 using namespace Polycode;
 
@@ -62,7 +66,7 @@ void Image::setPixelType(int type) {
 			pixelSize = 4;						
 		break;
 		case IMAGE_FP16:		
-			pixelSize = 16;
+			pixelSize = 6;
 		break;
 		default:
 			pixelSize = 4;								
@@ -193,13 +197,6 @@ void Image::perlinNoise(int seed, bool alpha) {
 	}
 }
 
-void Image::writeBMP(const String& fileName) const {
-//	SDL_Surface *image;
-//	image = SDL_CreateRGBSurface(SDL_SWSURFACE, width, height, 32, 0x0000FF, 0x00FF00, 0xFF0000, 0x000000);
-//	memcpy(image->pixels,imageData,width * height * 4);
-//	SDL_SaveBMP(image, fileName.c_str());
-}
-
 void Image::fillRect(int x, int y, int w, int h, Color col) {
 	for(int i=0; i < w; i++) {
 		for(int j=0; j < h; j++) {
@@ -250,218 +247,6 @@ void Image::setPixel(int x, int y, Number r, Number g, Number b, Number a) {
 	color.setColor(r,g,b,a);
 	unsigned int *imageData32 = (unsigned int*)imageData;
 	imageData32[x+(y*width)] = color.getUint();
-}
-
-void Image::multiply(Number amt, bool color, bool alpha) {
-	int startIndex = 0;
-	int endIndex = 3;
-	if(!color)
-		startIndex = 3;
-	if(!alpha)
-		endIndex = 2;
-		
-	for (int i = 0; i < height*width*pixelSize; i+=pixelSize) {
-		for(int j = startIndex; j < endIndex+1;j++) {
-			if(((Number)imageData[i+j]) * amt< 0)
-				imageData[i+j] = 0;
-			else if(((Number)imageData[i+j]) * amt > 255)
-				imageData[i+j] = 255;
-			else
-				imageData[i+j] = (char)(((Number)imageData[i+j]) * amt);
-		}
-	}
-}
-
-void Image::darken(Number amt, bool color, bool alpha) {
-	char decAmt = 255.0f * amt;
-	int startIndex = 0;
-	int endIndex = 3;
-	if(!color)
-		startIndex = 3;
-	if(!alpha)
-		endIndex = 2;
-		
-	for (int i = 0; i < height*width*pixelSize; i+=pixelSize) {
-		for(int j = startIndex; j < endIndex+1;j++) {
-			if(imageData[i+j]-decAmt < 0)
-				imageData[i+j] = 0;
-			else
-				imageData[i+j] -= decAmt;
-		}
-	}
-}
-
-void Image::lighten(Number amt, bool color, bool alpha) {
-	char decAmt = 255.0f * amt;
-	int startIndex = 0;
-	int endIndex = 3;
-	if(!color)
-		startIndex = 3;
-	if(!alpha)
-		endIndex = 2;
-		
-	for (int i = 0; i < height*width*pixelSize; i+=pixelSize) {
-		for(int j = startIndex; j < endIndex+1;j++) {
-			if(imageData[i+j]+decAmt > 255)
-				imageData[i+j] = 255;
-			else
-				imageData[i+j] += decAmt;
-		}
-	}
-}
-
-float* Image::createKernel(float radius, float deviation) {
-	int size = 2 * (int)radius + 1;
-	float* kernel = (float*)malloc(sizeof(float) * (size+1));
-	float radiusf = fabs(radius) + 1.0f;
-
-	if(deviation == 0.0f) deviation = sqrtf(
-			-(radiusf * radiusf) / (2.0f * logf(1.0f / 255.0f))
-	);
-
-	kernel[0] = size;
-
-	float value = -radius;
-	float sum   = 0.0f;
-	int i;
-
-	for(i = 0; i < size; i++) {
-			kernel[1 + i] =
-					1.0f / (2.506628275f * deviation) *
-					expf(-((value * value) / (2.0f * (deviation * deviation))));
-
-			sum   += kernel[1 + i];
-			value += 1.0f;
-	}
-
-	for(i = 0; i < size; i++) {
-		kernel[1 + i] /= sum;
-	}
-	return kernel;
-}
-
-void Image::gaussianBlur(float radius, float deviation) {
-
-	char *newData = (char*)malloc(width*height*pixelSize);
-	
-	char *horzBlur;
-	char *vertBlur;
-
-	
-	horzBlur = (char*)malloc(sizeof(float)*pixelSize*width*height);
-	vertBlur = (char*)malloc(sizeof(float)*pixelSize*width*height);
-
-	float *kernel = createKernel(radius, deviation);
-	
-	int i, iY, iX;
-
-        // Horizontal pass.
-        for(iY = 0; iY < height; iY++) {
-                for(iX = 0; iX < width; iX++) {
-						float val[4];
-						memset(val, 0, sizeof(float) * 4);
-												
-                        int offset = ((int)kernel[0]) / -2;
-
-                        for(i = 0; i < ((int)kernel[0]); i++) {
-                                int x = iX + offset;
-
-                                if(x < 0 || x >= width) { offset++; continue; }
-
-                                float kernip1 = kernel[i + 1];
-								
-								if(imageType == IMAGE_FP16) {
-									float *dataPtr = (float*)&imageData[(width * pixelSize * iY) + (pixelSize * x)];
-									for(int c=0; c < 4; c++) {
-										val[c] += kernip1 * dataPtr[c];
-									}				
-									
-								} else {
-									char *dataPtr = &imageData[(width * pixelSize * iY) + (pixelSize * x)];
-									for(int c=0; c < pixelSize; c++) {
-										val[c] += kernip1 * ((float)dataPtr[c]);
-									}				
-								}
-								
-                                offset++;
-                        }										
-
-						if(imageType == IMAGE_FP16) {
-							int baseOffset = (width * 4 * iY) + (4 * iX);
-							for(int c=0; c < 4; c++) {
-								float *f_horzBlur = (float*)horzBlur;
-								f_horzBlur[baseOffset+c] = val[c];
-							}				
-						} else {
-							int baseOffset = (width * pixelSize * iY) + (pixelSize * iX);
-							for(int c=0; c < pixelSize; c++) {	
-								if(val[c] > 255.0) {
-									val[c] = 255.0;
-								}
-								horzBlur[baseOffset+c] = (char)val[c];
-							}				
-						}
-                }
-        }
-
-	// Vertical pass.
-        for(iY = 0; iY < height; iY++) {
-                for(iX = 0; iX < width; iX++) {
-						float val[4];	
-						memset(val, 0, sizeof(float) * 4);					
-                        int offset = ((int)kernel[0]) / -2;
-
-                        for(i = 0; i < ((int)kernel[0]); i++) {
-                                int y = iY + offset;
-
-                                if(y < 0 || y >= height) {
-                                        offset++;
-                                        continue;
-                                }
-
-                                float kernip1 = kernel[i + 1];
-								if(imageType == IMAGE_FP16) {
-									float *dataPtr = (float*)&horzBlur[(width * pixelSize * y) + (pixelSize * iX)];
-									for(int c=0; c < 4; c++) {
-										val[c] += kernip1 * dataPtr[c];
-									}				
-									
-								} else {
-									char *dataPtr = &horzBlur[(width * pixelSize * y) + (pixelSize * iX)];
-									for(int c=0; c < pixelSize; c++) {
-										val[c] += kernip1 * ((float)dataPtr[c]);
-									}				
-								}
-                                offset++;
-                        }
-						
-						if(imageType == IMAGE_FP16) {
-							int baseOffset = (width * 4 * iY) + (4 * iX);
-							for(int c=0; c < 4; c++) {
-								float *f_vertBlur = (float*)vertBlur;
-								f_vertBlur[baseOffset+c] = val[c];
-							}				
-						} else {
-							int baseOffset = (width * pixelSize * iY) + (pixelSize * iX);
-							for(int c=0; c < pixelSize; c++) {
-								if(val[c] > 255.0) {
-									val[c] = 255.0;
-								}							
-								vertBlur[baseOffset+c] = (char)val[c];
-							}				
-						}
-                }
-        }
-
-
-	memcpy(newData, vertBlur, height * width * pixelSize);
-
-	free(horzBlur);
-	free(vertBlur);
-	free(kernel);
-	
-	free(imageData);
-	imageData = newData;
 }
 
 void Image::fastBlurHor(int blurSize) {
@@ -564,50 +349,6 @@ void Image::fastBlurVert(int blurSize) {
 void Image::fastBlur(int blurSize) {
 	fastBlurHor(blurSize);
 	fastBlurVert(blurSize);
-/*
-	unsigned char *blurImage = (unsigned char*)malloc(width*height*4);
-
-	int total_r;
-	int total_g;
-	int total_b;
-	int total_a;	
-	
-	unsigned int *imageData32 = (unsigned int*)imageData;
-	unsigned char *pixel;
-	int amt;	
-		
-	for (int y = 0; y < height; y++) {
-		for (int x = 0; x < width; x++) {
-                total_r = 0;
-				total_g = 0;
-				total_b = 0;
-				total_a = 0;
-				amt = 0;
-				for (int ky = -blurSize; ky <= blurSize; ky++) {
-					for (int kx = -blurSize; kx <= blurSize ; kx++) {
-						if(x+kx+((y+ky)*width) > 0 && x+kx+((y+ky)*width) < width*height) {
-							pixel = (unsigned char*)&(imageData32[(x+kx)+((y+ky)*width)]);
-							total_r += pixel[0];
-							total_g += pixel[1];
-							total_b += pixel[2];
-							total_a += pixel[3];
-							amt++;
-						}
-					}
-				}
-				
-//				Logger::log("%d / %d = %d\n",total_r, amt, (total_r/amt));
-				blurImage[((x+(y*width))*4)] = (total_r/amt);
-				blurImage[((x+(y*width))*4)+1] = (total_g / amt);
-				blurImage[((x+(y*width))*4)+2] = (total_b / amt);
-				blurImage[((x+(y*width))*4)+3] = (total_a / amt);
-				
-            }
-        }
-
-	imageData = (char*)blurImage;
-//	free(imageData32);
-*/
 }
 
 void Image::swap(int *v1, int *v2) {
@@ -654,10 +395,19 @@ void Image::drawLine(int x0, int y0, int x1, int y1, Color col) {
 }
 
 void Image::fill(Color color) {
-	unsigned int val = color.getUint();
-	unsigned int *imageData32 = (unsigned int*) imageData;
-	for(int i=0; i< width*height; i++) {
-		imageData32[i] = val;
+	if(imageType == Image::IMAGE_RGB) {
+		for(int i = 0; i < width*height*pixelSize; i+=3) {
+			imageData[i] = color.r;
+			imageData[i+1] = color.g;
+			imageData[i+2] = color.b;
+		}
+	} else {
+		unsigned int val = color.getUint();
+		unsigned int *imageData32 = (unsigned int*) imageData;
+
+		for(int i=0; i< width*height; i++) {
+			imageData32[i] = val;
+		}
 	}
 }
 
@@ -763,7 +513,178 @@ bool Image::savePNG(const String &fileName) {
 
 
 bool Image::loadImage(const String& fileName) {
-	return loadPNG(fileName);
+    
+	String extension;
+	size_t found;
+	found=fileName.rfind(".");
+	if (found != -1) {
+		extension = fileName.substr(found+1);
+	} else {
+		extension = "";
+	}
+
+    if(extension == "png") {
+        return loadPNG(fileName);
+    } else if(extension == "hdr") {
+        return loadHDR(fileName);
+    } else if(extension == "jpg" || extension == "tga" || extension == "psd") {
+        return loadSTB(fileName);
+    } else {
+        Logger::log("Error: Invalid image format.\n");
+        return false;
+    }
+}
+
+inline hfloat Image::convertFloatToHFloat(float f) {
+    float _f = f;
+    uint32_t x = *(uint32_t *)(&_f);
+    uint32_t sign = (uint32_t)(x >> 31);
+    uint32_t mantissa;
+    uint32_t exp;
+    hfloat          hf;
+    
+    // get mantissa
+    mantissa = x & ((1 << 23) - 1);
+    // get exponent bits
+    exp = x & FLOAT_MAX_BIASED_EXP;
+    if (exp >= HALF_FLOAT_MAX_BIASED_EXP_AS_SINGLE_FP_EXP)
+    {
+        // check if the original single precision float number is a NaN
+        if (mantissa && (exp == FLOAT_MAX_BIASED_EXP))
+        {
+            // we have a single precision NaN
+            mantissa = (1 << 23) - 1;
+        }
+        else
+        {
+            // 16-bit half-float representation stores number as Inf
+            mantissa = 0;
+        }
+        hf = (((hfloat)sign) << 15) | (hfloat)(HALF_FLOAT_MAX_BIASED_EXP) |
+        (hfloat)(mantissa >> 13);
+    }
+    // check if exponent is <= -15
+    else if (exp <= HALF_FLOAT_MIN_BIASED_EXP_AS_SINGLE_FP_EXP)
+    {
+        
+        // store a denorm half-float value or zero
+        exp = (HALF_FLOAT_MIN_BIASED_EXP_AS_SINGLE_FP_EXP - exp) >> 23;
+        mantissa >>= (14 + exp);
+        
+        hf = (((hfloat)sign) << 15) | (hfloat)(mantissa);
+    }
+    else
+    {
+        hf = (((hfloat)sign) << 15) |
+        (hfloat)((exp - HALF_FLOAT_MIN_BIASED_EXP_AS_SINGLE_FP_EXP) >> 13) |
+        (hfloat)(mantissa >> 13);
+    }
+    
+    return hf;
+}
+
+TokenArray Image::readTokens(char *line, const char *tokenString) {
+	char **tokens = (char**)malloc(sizeof(void*));
+	char *pch;
+	int numTokens = 0;
+	pch = strtok (line, tokenString);
+	while (pch != NULL) {
+		numTokens++;
+		tokens = (char**)realloc(tokens, sizeof(void*) *numTokens);
+		tokens[numTokens-1] = (char*) malloc(strlen(pch)+1);
+		memcpy(tokens[numTokens-1], pch, strlen(pch)+1);
+		pch = strtok (NULL, tokenString);
+	}
+    
+	TokenArray ta;
+	ta.size = numTokens;
+	ta.tokens = tokens;
+	return ta;
+}
+
+void Image::freeTokens(TokenArray tokens) {
+	int i;
+	for(i =0; i < tokens.size; i++) {
+		free(tokens.tokens[i]);
+	}
+	free(tokens.tokens);
+}
+
+bool Image::loadSTB(const String &fileName) {
+    
+    OSFILE *infile = OSBasics::open(fileName.c_str(), "rb");
+    
+    if(!infile) {
+        Logger::log("Error opening image file: %s\n", fileName.c_str());
+        return false;
+    }
+    
+    OSBasics::seek(infile, 0, SEEK_END);
+    long bufferLen = OSBasics::tell(infile);
+    OSBasics::seek(infile, 0, SEEK_SET);
+    
+    char *buffer = (char*) malloc(bufferLen);
+    OSBasics::read(buffer, bufferLen, 1, infile);
+    
+    int x,y,n;
+    stbi_uc *data = stbi_load_from_memory((const stbi_uc*)buffer, bufferLen, &x, &y, &n, 4);
+    
+    if(!data) {
+        Logger::log("Error reading image data: %s\n", fileName.c_str());
+        return false;
+    }
+    
+    imageType = Image::IMAGE_RGBA;
+    
+    width = x;
+    height = y;
+    
+    free(buffer);
+    
+    imageData = (char*)data;
+    
+    OSBasics::close(infile);
+
+    return true;
+}
+
+bool Image::loadHDR(const String &fileName) {
+    
+    imageType = Image::IMAGE_FP16;
+    
+    OSFILE *infile = OSBasics::open(fileName.c_str(), "rb");
+    
+    if(!infile) {
+        Logger::log("Error opening HDR %s\n", fileName.c_str());
+        return false;
+    }
+    
+    OSBasics::seek(infile, 0, SEEK_END);
+    long bufferLen = OSBasics::tell(infile);
+    OSBasics::seek(infile, 0, SEEK_SET);
+    
+    char *buffer = (char*) malloc(bufferLen);
+    OSBasics::read(buffer, bufferLen, 1, infile);
+    
+    int x,y,n;
+    float *data = stbi_loadf_from_memory((const stbi_uc*)buffer, bufferLen, &x, &y, &n, 0);
+    
+    if(!data) {
+        Logger::log("Error reading image data: %s\n", fileName.c_str());
+        return false;
+    }
+    
+    width = x;
+    height = y;
+    
+    free(buffer);
+    
+    imageData = (char*)data;
+    
+    OSBasics::close(infile);
+    
+    
+    return true;
 }
 
 bool Image::loadPNG(const String& fileName) {
@@ -887,5 +808,5 @@ void Image::transformCoordinates(int *x, int *y) {
 }
 
 void Image::transformCoordinates(int *x, int *y, int *w, int *h) {
-	*y = this->height - *h - *y - 1;
+	*y = this->height - *h - *y;
 }

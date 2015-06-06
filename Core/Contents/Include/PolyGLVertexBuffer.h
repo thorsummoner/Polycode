@@ -42,7 +42,7 @@ namespace Polycode {
 	class _PolyExport OpenGLVertexBuffer : public VertexBuffer {
 	public:
 		
-		OpenGLVertexBuffer(Mesh *mesh);
+		explicit OpenGLVertexBuffer(Mesh *mesh);
 		virtual ~OpenGLVertexBuffer();
 		
 		GLuint getVertexBufferID();		
@@ -50,14 +50,21 @@ namespace Polycode {
 		GLuint getNormalBufferID();
 		GLuint getColorBufferID();
 		GLuint getTangentBufferID();
-				
+		GLuint getIndexBufferID();
+		GLuint getBoneWeightBufferID();
+		GLuint getBoneIndexBufferID();
+        
 	protected:
 		
 		GLuint vertexBufferID;
 		GLuint texCoordBufferID;
 		GLuint normalBufferID;
 		GLuint colorBufferID;	
-		GLuint tangentBufferID;				
+		GLuint tangentBufferID;
+        GLuint indexBufferID;
+        
+        GLuint boneWeightBufferID;
+        GLuint boneIndexBufferID;
 	};
 	
 }

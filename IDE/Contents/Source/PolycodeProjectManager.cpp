@@ -38,6 +38,7 @@ PolycodeProject* PolycodeProjectManager::openProject(String path) {
 
 	for(int i=0; i < projects.size(); i++) {
 		if(projects[i]->getProjectFile() == path) {
+			setActiveProject(projects[i]);
 			return projects[i];
 		}
 	}	
@@ -72,7 +73,9 @@ PolycodeProject* PolycodeProjectManager::openProject(String path) {
 		CoreServices::getInstance()->getFontManager()->registerFont(fontName, fontPath);		
 	}
 	
-	projectBrowser->addProject(newProject);
+	setActiveProject(newProject);
+	
+	dispatchEvent(new Event(), Event::CHANGE_EVENT);	
 	return newProject;
 }
 
@@ -112,6 +115,7 @@ void PolycodeProjectManager::setActiveProject(PolycodeProject* project) {
 		if(project){			
 			CoreServices::getInstance()->getResourceManager()->addArchive(project->getRootFolder());
 		}
+		
 		dispatchEvent(new Event(), Event::CHANGE_EVENT);
 	}
 }

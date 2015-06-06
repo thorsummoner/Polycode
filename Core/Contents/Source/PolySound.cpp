@@ -26,16 +26,39 @@
 #undef OV_EXCLUDE_STATIC_CALLBACKS
 #include "PolyString.h"
 #include "PolyLogger.h"
+#include "PolySoundManager.h"
 
 #include "OSBasics.h"
 #include <string>
 #include <vector>
+#include <stdint.h>
 #include <limits>
 
 #define MAX_FLOAT (std::numeric_limits<double>::infinity())
+#define INT32_MAX (std::numeric_limits<int32_t>::max())
 
 using namespace std;
 using namespace Polycode;
+
+AudioStreamingSource::AudioStreamingSource(unsigned int channels, unsigned int bps, unsigned int freq) : channels(channels), freq(freq), bps(bps) {
+}
+
+unsigned int AudioStreamingSource::getNumChannels() {
+    return channels;
+}
+
+unsigned int AudioStreamingSource::getBitsPerSample() {
+    return bps;
+}
+
+unsigned int AudioStreamingSource::getFrequency() {
+    return freq;
+}
+
+unsigned int AudioStreamingSource::streamData(char *buffer, unsigned int size) {
+    return 0;
+}
+
 
 size_t custom_readfunc(void *ptr, size_t size, size_t nmemb, void *datasource) {
 	OSFILE *file = (OSFILE*) datasource;
@@ -57,20 +80,20 @@ long custom_tellfunc(void *datasource) {
 	return OSBasics::tell(file);
 }
 
-Sound::Sound(const String& fileName) :  referenceDistance(1), maxDistance(MAX_FLOAT), pitch(1), volume(1), sampleLength(-1) {
+Sound::Sound(const String& fileName, bool generateFloatBuffer) :  referenceDistance(1), maxDistance(MAX_FLOAT), pitch(1), volume(1), sampleLength(-1), streamingSound(false) {
 	checkALError("Construct: Loose error before construction");
 	soundLoaded = false;	
 
-	loadFile(fileName);	
+	loadFile(fileName, generateFloatBuffer);	
 	
 	setIsPositional(false);
 	
 	checkALError("Construct from file: Finished");
 }
 
-Sound::Sound(const char *data, int size, int channels, int freq, int bps) : referenceDistance(1), maxDistance(MAX_FLOAT), pitch(1), volume(1), buffer(AL_NONE), soundSource(AL_NONE), sampleLength(-1) {
+Sound::Sound(int size, const char *data, int channels, int freq, int bps, bool generateFloatBuffer) : referenceDistance(1), maxDistance(MAX_FLOAT), pitch(1), volume(1), buffer(AL_NONE), soundSource(AL_NONE), sampleLength(-1), streamingSound(false) {
 	checkALError("Construct: Loose error before construction");
-	buffer = loadBytes(data, size, freq, channels, bps);
+	buffer = loadBytes(data, size, freq, channels, bps, generateFloatBuffer);
 	
 	soundSource = GenSource(buffer);
 	
@@ -82,7 +105,76 @@ Sound::Sound(const char *data, int size, int channels, int freq, int bps) : refe
 	checkALError("Construct from data: Finished");
 }
 
-void Sound::loadFile(String fileName) {
+Sound::Sound(AudioStreamingSource *streamingSource) : referenceDistance(1), maxDistance(MAX_FLOAT), pitch(1), volume(1), buffer(AL_NONE), soundSource(AL_NONE), sampleLength(-1), streamingSound(true), streamingSource(streamingSource) {
+    
+    
+    alGenSources(1, &soundSource);
+    
+    alSourcef(soundSource, AL_PITCH, 1.0);
+    alSourcef(soundSource, AL_GAIN, 1.0);
+    
+    ALfloat sourcePos[] = {0.0, 0.0, 0.0};
+    ALfloat sourceVel[] = {0.0, 0.0, 0.0};
+    
+    alSourcefv(soundSource, AL_POSITION, sourcePos);
+    alSourcefv(soundSource, AL_VELOCITY, sourceVel);
+    
+    
+    alGenBuffers(STREAMING_BUFFER_COUNT, streamingBuffers);
+    
+    for(int i=0; i < STREAMING_BUFFER_COUNT; i++) {
+        if(updateALBuffer(streamingBuffers[i])) {
+            alSourceQueueBuffers(soundSource, 1, &streamingBuffers[i]);
+        }
+    }
+    Services()->getSoundManager()->registerStreamingSound(this);
+    
+	alSourcePlay(soundSource);
+    
+}
+
+void Sound::updateStream() {
+    ALint processed = 0;
+    alGetSourcei(soundSource, AL_BUFFERS_PROCESSED, &processed);
+    
+    while(processed--) {
+        ALuint buffer;
+        alSourceUnqueueBuffers(soundSource, 1, &buffer);
+        if(updateALBuffer(buffer)) {
+            alSourceQueueBuffers(soundSource, 1, &buffer);
+        }
+    }
+
+    ALenum state;
+    alGetSourcei(soundSource, AL_SOURCE_STATE, &state);
+    if(state != AL_PLAYING) {
+        alSourcePlay(soundSource);
+    }
+}
+
+bool Sound::updateALBuffer(ALuint buffer) {
+    
+    char data[STREAMING_BUFFER_SIZE];
+    unsigned int bytesStreamed = streamingSource->streamData(data, STREAMING_BUFFER_SIZE);
+    
+    if(bytesStreamed == 0) {
+        return false;
+    }
+    
+    ALenum format;
+    if (streamingSource->getNumChannels() == 1) {
+        format = (streamingSource->getBitsPerSample() == 8) ? AL_FORMAT_MONO8 : AL_FORMAT_MONO16;
+    } else {
+        format = (streamingSource->getBitsPerSample() == 8) ? AL_FORMAT_STEREO8 : AL_FORMAT_STEREO16;
+    }
+    
+    alBufferData(buffer, format, data, bytesStreamed, streamingSource->getFrequency());
+    
+    return true;
+}
+
+
+void Sound::loadFile(String fileName, bool generateFloatBuffer) {
 
 	if(soundLoaded) {
 		alDeleteSources(1,&soundSource);	
@@ -106,9 +198,9 @@ void Sound::loadFile(String fileName) {
 	}
 	
 	if(extension == "wav" || extension == "WAV") {
-		buffer = loadWAV(actualFilename);			
+		buffer = loadWAV(actualFilename, generateFloatBuffer);			
 	} else if(extension == "ogg" || extension == "OGG") {
-		buffer = loadOGG(actualFilename);			
+		buffer = loadOGG(actualFilename, generateFloatBuffer);
 	}
 	
 	this->fileName = actualFilename;
@@ -143,10 +235,17 @@ Number Sound::getPitch() {
 }
 
 Sound::~Sound() {
+    
+	alSourcei(soundSource, AL_BUFFER, 0);
+    
 	alDeleteSources(1,&soundSource);
 	checkALError("Destroying sound");
 	alDeleteBuffers(1, &buffer);
 	checkALError("Deleting buffer");
+    if(streamingSound) {
+        alDeleteBuffers(STREAMING_BUFFER_COUNT, streamingBuffers);
+        Services()->getSoundManager()->unregisterStreamingSound(this);
+    }
 }
 
 void Sound::soundCheck(bool result, const String& err) {
@@ -295,7 +394,6 @@ Number Sound::getMaxDistance() {
 	return maxDistance;
 }
 
-
 void Sound::setIsPositional(bool isPositional) {
 	this->isPositional = isPositional;
 	if(isPositional) {
@@ -371,7 +469,7 @@ ALuint Sound::GenSource(ALuint buffer) {
 	return source;
 }
 
-ALuint Sound::loadBytes(const char *data, int size, int freq, int channels, int bps) {
+ALuint Sound::loadBytes(const char *data, int size, int freq, int channels, int bps, bool generateFloatBuffer) {
 	ALenum format;
 	if (channels == 1)
 		format = (bps == 8) ? AL_FORMAT_MONO8 : AL_FORMAT_MONO16;
@@ -388,10 +486,19 @@ ALuint Sound::loadBytes(const char *data, int size, int freq, int channels, int 
 	
 	alBufferData(buffer, format, data, size, freq);
 	checkALError("LoadBytes: load buffer data");
+    
+	if(generateFloatBuffer) {
+		int32_t *ptr32 = (int32_t*) &data[0];
+		for(int i=0; i < size/4; i++ ) {
+			floatBuffer.push_back(((Number)ptr32[i])/((Number)INT32_MAX));
+		}
+	}
+    
 	return buffer;
 }
 
-ALuint Sound::loadOGG(const String& fileName) {
+ALuint Sound::loadOGG(const String& fileName, bool generateFloatBuffer) {
+//	floatBuffer.clear();
 	vector<char> data;
 	
 	alGenBuffers(1, &buffer);
@@ -444,10 +551,22 @@ ALuint Sound::loadOGG(const String& fileName) {
 	
 	alBufferData(buffer, format, &data[0], static_cast<ALsizei>(data.size()), freq);
 	
+	if(generateFloatBuffer) {
+		int32_t *ptr32 = (int32_t*) &data[0];
+		for(int i=0; i < data.size()/4; i++ ) {
+			floatBuffer.push_back(((Number)ptr32[i])/((Number)INT32_MAX));
+		}	
+	}
 	return buffer;
 }
 
-ALuint Sound::loadWAV(const String& fileName) {
+
+std::vector<float> *Sound::getFloatBuffer() {
+	return &floatBuffer;
+}
+
+
+ALuint Sound::loadWAV(const String& fileName, bool generateFloatBuffer) {
 	long bytes;
 	vector <char> data;
 	ALsizei freq;
@@ -544,7 +663,7 @@ ALuint Sound::loadWAV(const String& fileName) {
 		OSBasics::close(f);
 		f = NULL;
 				
-		return loadBytes(&data[0], data.size(), freq, channels, bps);
+		return loadBytes(&data[0], data.size(), freq, channels, bps, generateFloatBuffer);
 //		if (buffer)
 //			if (alIsBuffer(buffer) == AL_TRUE)
 //				alDeleteBuffers(1, &buffer);

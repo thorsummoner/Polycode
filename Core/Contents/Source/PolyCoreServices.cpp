@@ -31,7 +31,6 @@
 #include "PolyRenderer.h"
 #include "PolyConfig.h"
 #include "PolyFontManager.h"
-#include "PolyScreenManager.h"
 #include "PolySceneManager.h"
 #include "PolyTimerManager.h"
 #include "PolyTweenManager.h"
@@ -43,6 +42,10 @@ std::map<long, CoreServices*> CoreServices::instanceMap;
 CoreMutex *CoreServices::renderMutex = 0;
 CoreServices* CoreServices::overrideInstance = NULL;
 
+CoreServices *Polycode::Services() {
+    return CoreServices::getInstance();
+}
+
 CoreMutex *CoreServices::getRenderMutex() {
 	if(renderMutex == NULL) {
 		Logger::log("Creating render mutex...\n");
@@ -53,7 +56,7 @@ CoreMutex *CoreServices::getRenderMutex() {
 
 void CoreServices::setInstance(CoreServices *_instance) {
 	overrideInstance = _instance;
-	Logger::log("Overriding core instance...\n");
+	Logger::log("Overriding core instance to %d...\n", _instance);
 }
 
 CoreServices* CoreServices::getInstance() {
@@ -108,8 +111,6 @@ void CoreServices::installModule(PolycodeModule *module)  {
 	
 	switch(module->getType()) {
 		case PolycodeModule::TYPE_SHADER:
-//			renderer->addShaderModule((ShaderModule*)module);
-			resourceManager->addShaderModule((PolycodeShaderModule*) module);
 			materialManager->addShaderModule((PolycodeShaderModule*) module);
 			renderer->addShaderModule((PolycodeShaderModule*) module);
 		break;
@@ -121,92 +122,55 @@ void CoreServices::setupBasicListeners() {
 }
 
 CoreServices::CoreServices() : EventDispatcher() {
-	logger = new Logger();
+	logger = Logger::getInstance();
 	resourceManager = new ResourceManager();	
 	config = new Config();
-	materialManager = new MaterialManager();
-	screenManager = new ScreenManager();
-	addEventListener(screenManager, InputEvent::EVENT_MOUSEDOWN);
-	addEventListener(screenManager, InputEvent::EVENT_MOUSEMOVE);
-	addEventListener(screenManager, InputEvent::EVENT_MOUSEUP);
-	addEventListener(screenManager, InputEvent::EVENT_MOUSEWHEEL_UP);
-	addEventListener(screenManager, InputEvent::EVENT_MOUSEWHEEL_DOWN);
-	addEventListener(screenManager, InputEvent::EVENT_KEYDOWN);
-	addEventListener(screenManager, InputEvent::EVENT_KEYUP);
-	addEventListener(screenManager, InputEvent::EVENT_TOUCHES_BEGAN);
-	addEventListener(screenManager, InputEvent::EVENT_TOUCHES_ENDED);
-	addEventListener(screenManager, InputEvent::EVENT_TOUCHES_MOVED);
+	materialManager = new MaterialManager();	
 	sceneManager = new SceneManager();
 	timerManager = new TimerManager();
 	tweenManager = new TweenManager();
 	soundManager = new SoundManager();
 	fontManager = new FontManager();
-	
-	focusedChild = NULL;
 }
 
 CoreServices::~CoreServices() {
 	delete materialManager;
-	delete screenManager;
 	delete sceneManager;
 	delete timerManager;
 	delete tweenManager;
 	delete resourceManager;
 	delete soundManager;
 	delete fontManager;
+    delete logger;
+    delete config;
+    delete renderer;
+
+    for(std::size_t i = 0; i < modules.size(); i++) {
+        delete modules[i];
+    }
+    
 	instanceMap.clear();
 	overrideInstance = NULL;
-	
 }
 
 void CoreServices::setCore(Core *core) {
 	this->core = core;
-	core->getInput()->addEventListener(this, InputEvent::EVENT_MOUSEDOWN);
-	core->getInput()->addEventListener(this, InputEvent::EVENT_MOUSEMOVE);
-	core->getInput()->addEventListener(this, InputEvent::EVENT_MOUSEUP);
-	core->getInput()->addEventListener(this, InputEvent::EVENT_MOUSEWHEEL_DOWN);	
-	core->getInput()->addEventListener(this, InputEvent::EVENT_MOUSEWHEEL_UP);		
-	core->getInput()->addEventListener(this, InputEvent::EVENT_KEYDOWN);
-	core->getInput()->addEventListener(this, InputEvent::EVENT_KEYUP);
-	core->getInput()->addEventListener(this, InputEvent::EVENT_TOUCHES_BEGAN);
-	core->getInput()->addEventListener(this, InputEvent::EVENT_TOUCHES_ENDED);
-	core->getInput()->addEventListener(this, InputEvent::EVENT_TOUCHES_MOVED);		
 }
 
 void CoreServices::handleEvent(Event *event) {
-	if(event->getDispatcher() == core->getInput()) {
-		InputEvent *inputEvent = (InputEvent*)event;
-		switch(event->getEventCode()) {
-			case InputEvent::EVENT_KEYDOWN:
-			case InputEvent::EVENT_KEYUP:
-				dispatchEvent(new InputEvent(inputEvent->key, inputEvent->charCode, inputEvent->timestamp), inputEvent->getEventCode());			
-			break;
-			case InputEvent::EVENT_TOUCHES_BEGAN:
-			case InputEvent::EVENT_TOUCHES_ENDED:
-			case InputEvent::EVENT_TOUCHES_MOVED:						
-			{
-				InputEvent *event = new InputEvent();
-				event->touches = inputEvent->touches;
-				event->timestamp = inputEvent->timestamp;
-				dispatchEvent(event, inputEvent->getEventCode());
-			}
-			break;
-			default:
-				InputEvent *_inputEvent = new InputEvent(inputEvent->mousePosition, inputEvent->timestamp);
-				_inputEvent->mouseButton = inputEvent->mouseButton;
-				dispatchEvent(_inputEvent, inputEvent->getEventCode());			
-			break;
-		}
-	}
 }
 
 Core *CoreServices::getCore() {
 	return core;
 }
 
+CoreInput *CoreServices::getInput() {
+	return core->getInput();
+}
 
 void CoreServices::setRenderer(Renderer *renderer) {
 	this->renderer = renderer;
+	sceneManager->setRenderer(renderer);
 }
 
 Renderer *CoreServices::getRenderer() {
@@ -217,21 +181,14 @@ void CoreServices::Render() {
 	if(renderer->doClearBuffer)		
 		renderer->clearScreen();
 
-	renderer->setPerspectiveMode();
+	renderer->setPerspectiveDefaults();
 	sceneManager->renderVirtual();
-	if(renderer->doClearBuffer)
-		renderer->clearScreen();					
+	sceneManager->Render();
+	renderer->clearLights();
+}
 
-	if(screenManager->drawScreensFirst) {
-		renderer->clearLights();	
-		screenManager->Render();
-		renderer->setPerspectiveMode();
-		sceneManager->Render();	
-	} else {
-		sceneManager->Render();
-		renderer->clearLights();		
-		screenManager->Render();	
-	}
+void CoreServices::fixedUpdate() {
+    sceneManager->fixedUpdate();
 }
 
 void CoreServices::Update(int elapsed) {
@@ -241,18 +198,14 @@ void CoreServices::Update(int elapsed) {
 	}
 	resourceManager->Update(elapsed);
 	timerManager->Update();	
-	tweenManager->Update();	
+	tweenManager->Update(elapsed);	
 	materialManager->Update(elapsed);		
 	sceneManager->Update();
-	screenManager->Update();	
+    soundManager->Update();
 }
 
 SoundManager *CoreServices::getSoundManager() {
 	return soundManager;
-}
-
-ScreenManager *CoreServices::getScreenManager() {
-	return screenManager;
 }
 
 SceneManager *CoreServices::getSceneManager() {

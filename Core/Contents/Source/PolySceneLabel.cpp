@@ -25,54 +25,112 @@
 #include "PolyFontManager.h"
 #include "PolyLabel.h"
 #include "PolyMesh.h"
-#include "PolyPolygon.h"
 #include "PolyRenderer.h"
 #include "PolyMaterialManager.h"
 
 using namespace Polycode;
 
-SceneLabel::SceneLabel(const String& fontName, const String& text, int size, Number scale, int amode, bool premultiplyAlpha) : ScenePrimitive(ScenePrimitive::TYPE_PLANE, 1, 1) {
-	label = new Label(CoreServices::getInstance()->getFontManager()->getFontByName(fontName), text, size, amode, premultiplyAlpha);
-	this->scale = scale;
-	updateFromLabel();
+Vector3 SceneLabel::defaultAnchor = Vector3();
+bool SceneLabel::defaultPositionAtBaseline = false;
+bool SceneLabel::defaultSnapToPixels = false;
+bool SceneLabel::createMipmapsForLabels = true;
+
+SceneLabel::SceneLabel(const String& text, int size, const String& fontName, int amode, Number actualHeight, bool premultiplyAlpha) : ScenePrimitive(ScenePrimitive::TYPE_VPLANE, 1, 1){
+
+	label = new Label(CoreServices::getInstance()->getFontManager()->getFontByName(fontName), text, size * CoreServices::getInstance()->getRenderer()->getBackingResolutionScaleX(), amode, premultiplyAlpha);
+    
+	positionAtBaseline = SceneLabel::defaultPositionAtBaseline;
+	setAnchorPoint(SceneLabel::defaultAnchor);	
+	snapToPixels = SceneLabel::defaultSnapToPixels;	
+	setLabelActualHeight(actualHeight);
 }
 
+Entity *SceneLabel::Clone(bool deepClone, bool ignoreEditorOnly) const {
+	SceneLabel *newLabel = new SceneLabel(label->getText(), label->getSize(), label->getFont()->getFontName(), actualHeight, label->getPremultiplyAlpha());
+    applyClone(newLabel, deepClone, ignoreEditorOnly);
+    return newLabel;
+}
+
+void SceneLabel::applyClone(Entity *clone, bool deepClone, bool ignoreEditorOnly) const {
+    
+    SceneLabel* cloneLabel = (SceneLabel*) clone;
+    
+
+    cloneLabel->getLabel()->setSize(label->getSize());
+    cloneLabel->getLabel()->setAntialiasMode(label->getAntialiasMode());
+    cloneLabel->getLabel()->setFont(label->getFont());
+    cloneLabel->getLabel()->setPremultiplyAlpha(label->getPremultiplyAlpha());
+    cloneLabel->setLabelActualHeight(actualHeight);
+    cloneLabel->positionAtBaseline = positionAtBaseline;
+    cloneLabel->setText(label->getText());
+    
+    ScenePrimitive::applyClone(clone, deepClone, ignoreEditorOnly);
+}
+
+
 SceneLabel::~SceneLabel() {
+    delete label;
 }
 
 Label *SceneLabel::getLabel() {
 	return label;
 }
 
+String SceneLabel::getText() {
+	return label->getText();
+}
+
+void SceneLabel::setLabelActualHeight(Number actualHeight) {
+    this->actualHeight = actualHeight;
+    
+    if(actualHeight > 0.0) {
+        labelScale = actualHeight/((Number)label->getSize()) * CoreServices::getInstance()->getRenderer()->getBackingResolutionScaleX();
+    } else {
+        labelScale = 1.0;
+    }
+    updateFromLabel();
+}
+
+Number SceneLabel::getLabelActualHeight() {
+    return actualHeight;
+}
+
 void SceneLabel::updateFromLabel() {
 
-	MaterialManager *materialManager = CoreServices::getInstance()->getMaterialManager();	
+	MaterialManager *materialManager = CoreServices::getInstance()->getMaterialManager();
 	if(texture)
 		materialManager->deleteTexture(texture);
 
-	texture = materialManager->createTextureFromImage(label, materialManager->clampDefault, materialManager->mipmapsDefault);
+	if(SceneLabel::createMipmapsForLabels) {
+		texture = materialManager->createTextureFromImage(label, materialManager->clampDefault, materialManager->mipmapsDefault);	
+	} else {
+		texture = materialManager->createTextureFromImage(label, materialManager->clampDefault, false);		
+	}
 
 	if(material) {
 		localShaderOptions->clearTexture("diffuse");
 		localShaderOptions->addTexture("diffuse", texture);	
 	}
 
-	delete mesh;
-	mesh = new Mesh(Mesh::QUAD_MESH);
-	mesh->createVPlane(label->getWidth()*scale,label->getHeight()*scale);
+
+	setPrimitiveOptions(type, label->getWidth()*labelScale/CoreServices::getInstance()->getRenderer()->getBackingResolutionScaleX(),label->getHeight()*labelScale/CoreServices::getInstance()->getRenderer()->getBackingResolutionScaleX());
 	
-	bBox.x = label->getWidth()*scale;
-	bBox.y = label->getHeight()*scale;
-	bBox.z = 0;
-	
-	
+    setLocalBoundingBox(label->getWidth()*labelScale / CoreServices::getInstance()->getRenderer()->getBackingResolutionScaleX(), label->getHeight()*labelScale/ CoreServices::getInstance()->getRenderer()->getBackingResolutionScaleX(), 0.001);
+    
 	if(useVertexBuffer)
 		CoreServices::getInstance()->getRenderer()->createVertexBufferForMesh(mesh);
 	
-	// TODO: resize it here
-	
-	bBoxRadius = label->getWidth()*scale;
+}
 
+void SceneLabel::Render() {
+	if(positionAtBaseline) {
+		CoreServices::getInstance()->getRenderer()->translate2D(0.0, (((Number)label->getSize()*labelScale) * -1.0 / CoreServices::getInstance()->getRenderer()->getBackingResolutionScaleY()) + (((Number)label->getBaselineAdjust())*labelScale/CoreServices::getInstance()->getRenderer()->getBackingResolutionScaleY()));
+	}
+	ScenePrimitive::Render();
+}
+
+int SceneLabel::getTextWidthForString(String text) {
+    return label->getTextWidthForString(text) / CoreServices::getInstance()->getRenderer()->getBackingResolutionScaleX();
 }
 
 void SceneLabel::setText(const String& newText) {

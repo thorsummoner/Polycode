@@ -108,18 +108,37 @@ namespace Polycode {
 				return pos;
 			}
 
+			inline Vector3 multiplyWithPerspective(const Vector3 &v2) const
+			{
+				Number divisor = v2.x*m[0][3] + v2.y*m[1][3] + v2.z*m[2][3] + m[3][3];
+				return (*this * v2) / divisor;
+			}
+
 			// ----------------------------------------------------------------------------------------------------------------
 			/** @name Operators
 			*  Available vector operators.
 			*/
 			//@{
 
-
+        
+            inline Matrix4 operator * (Number n) const {
+                return Matrix4(
+                           n*m[0][0], n*m[0][1], n*m[0][2], n*m[0][3],
+                           n*m[1][0], n*m[1][1], n*m[1][2], n*m[1][3],
+                           n*m[2][0], n*m[2][1], n*m[2][2], n*m[2][3],
+                           n*m[3][0], n*m[3][1], n*m[3][2], n*m[3][3]);
+            }
+        
+            inline Vector3 multVector( const Vector3 &v2 ) const
+            {
+                return Vector3(v2.x*m[0][0] + v2.y*m[1][0] + v2.z*m[2][0] + m[3][0],
+                               v2.x*m[0][1] + v2.y*m[1][1] + v2.z*m[2][1] + m[3][1],
+                               v2.x*m[0][2] + v2.y*m[1][2] + v2.z*m[2][2] + m[3][2]);
+            }
+        
 			inline Vector3 operator * ( const Vector3 &v2 ) const
 			{
-				return Vector3(v2.x*m[0][0] + v2.y*m[1][0] + v2.z*m[2][0] + m[3][0],
-								v2.x*m[0][1] + v2.y*m[1][1] + v2.z*m[2][1] + m[3][1],
-								v2.x*m[0][2] + v2.y*m[1][2] + v2.z*m[2][2] + m[3][2]);
+				return multVector(v2);
 			}			
 			
 			inline Number* operator [] ( int row ) { return m[row];}

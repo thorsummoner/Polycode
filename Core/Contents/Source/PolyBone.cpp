@@ -29,19 +29,12 @@
 
 using namespace Polycode;
 
-Bone::Bone(const String& boneName) : SceneEntity() {
+Bone::Bone(const String& boneName) : Entity() {
 	this->boneName = boneName;
-//	boneMesh = new ScenePrimitive(ScenePrimitive::TYPE_BOX, 0.1, 0.1, 0.1);
-	this->depthTest = false;
 	parentBone = NULL;
 	boneMatrix.identity();
-//	addChild(boneMesh);
-	
-	boneMesh = new Mesh(Mesh::QUAD_MESH);
-	boneMesh->createBox(0.2,0.2,0.2);
-	
+    disableAnimation = false;
 }
-
 
 Bone::~Bone() {
 
@@ -78,14 +71,48 @@ Matrix4 Bone::getBoneMatrix() const {
 	}
 }
 
-Matrix4 Bone::getFinalMatrix() const {
-	Matrix4 final = boneMatrix;
+void Bone::intializeBone(const Vector3 &basePosition, const Vector3 &baseScale, const Quaternion &baseRotation, const Vector3 &restPosition, const Vector3 &restScale, const Quaternion &restRotation) {
+    
+    this->baseRotation = baseRotation;
+    this->baseScale = baseScale;
+    this->basePosition = basePosition;
+    
+    setPosition(basePosition);
+    setRotationByQuaternion(baseRotation);
+    setScale(baseScale);
+    rebuildTransformMatrix();
+    
+    setBaseMatrix(getTransformMatrix());
+    setBoneMatrix(getTransformMatrix());
+    
+    Matrix4 restRotationMatrix = restRotation.createMatrix();
 
-	if(parentBone) {
-		final = final * parentBone->getFinalMatrix();
-	} 
-	
-	return final;
+    Matrix4 restPositionMatrix;
+    restPositionMatrix.identity();
+    restPositionMatrix.setPosition(restPosition.x, restPosition.y, restPosition.z);
+
+    Matrix4 restScaleMatrix;
+    restScaleMatrix.identity();
+    restScaleMatrix.setScale(restScale);
+    
+    
+    setRestMatrix(restScaleMatrix*restRotationMatrix*restPositionMatrix);
+}
+
+Matrix4 Bone::getFinalMatrix() const {
+    return finalMatrix;
+}
+
+Matrix4 Bone::buildFinalMatrix() const {
+    if(parentBone) {
+        return boneMatrix * parentBone->buildFinalMatrix();
+    } else {
+        return boneMatrix;
+    }
+}
+
+void Bone::rebuildFinalMatrix() {
+    finalMatrix = restMatrix * buildFinalMatrix();
 }
 
 void Bone::setBoneMatrix(const Matrix4& matrix) {
@@ -131,25 +158,6 @@ void Bone::setRestMatrix(const Matrix4& matrix) {
 	restMatrix = matrix;
 }
 
-const String& Bone::getName() const {
+String Bone::getName() const {
 	return boneName;
-}
-
-void Bone::enableBoneLabel(const String& fontLabel, Number size, Number scale, Color labelColor) {
-	SceneLabel *label = new SceneLabel(fontLabel, boneName, size, scale, Label::ANTIALIAS_FULL);
-	label->setColor(labelColor);
-	label->billboardMode = true;
-	label->depthTest = false;
-	addEntity(label);
-}
-
-void Bone::Render() {
-
-	CoreServices::getInstance()->getRenderer()->setTexture(NULL);	
-//	renderer->pushDataArrayForMesh(boneMesh, RenderDataArray::COLOR_DATA_ARRAY);
-	renderer->pushDataArrayForMesh(boneMesh, RenderDataArray::VERTEX_DATA_ARRAY);
-	renderer->pushDataArrayForMesh(boneMesh, RenderDataArray::TEXCOORD_DATA_ARRAY);	
-	renderer->pushDataArrayForMesh(boneMesh, RenderDataArray::NORMAL_DATA_ARRAY);		
-	renderer->drawArrays(boneMesh->getMeshType());	
-
 }

@@ -21,8 +21,10 @@
  */
 
 #include "PolycodeEditor.h"
+#include "PolycodeFrame.h"
 
 extern PolycodeClipboard *globalClipboard;
+
 
 PolycodeEditorFactory::PolycodeEditorFactory() {
 	
@@ -44,20 +46,23 @@ void PolycodeEditor::setFilePath(String newPath) {
 	filePath = newPath;
 }
 
-PolycodeEditor::PolycodeEditor(bool _isReadOnly) : ScreenEntity(), ClipboardProvider() {
+PolycodeEditor::PolycodeEditor(bool _isReadOnly) : UIElement(), ClipboardProvider() {
 	this->_isReadOnly = _isReadOnly;
-	enableScissor = true;	
+//	enableScissor = true;	
 	processInputEvents = true;
 	_hasChanges = false;
 	
-	currentUndoPosition = 0;
+	editorHolder = NULL;
+	
+	currentUndoPosition = -1;
 	
 	Core *core = CoreServices::getInstance()->getCore();
 	
 	core->addEventListener(this, Core::EVENT_COPY);
 	core->addEventListener(this, Core::EVENT_PASTE);
 	core->addEventListener(this, Core::EVENT_UNDO);	
-	core->addEventListener(this, Core::EVENT_REDO);	
+	core->addEventListener(this, Core::EVENT_REDO);
+	core->addEventListener(this, Core::EVENT_SELECT_ALL);
 }
 
 void PolycodeEditor::setHasChanges(bool newVal) {
@@ -67,13 +72,28 @@ void PolycodeEditor::setHasChanges(bool newVal) {
 	}
 }
 
-void PolycodeEditor::handleEvent(Event *event) {
+void PolycodeEditor::setEditorHolder(EditorHolder *holder) {
+	editorHolder = holder;
+}
+
+EditorHolder *PolycodeEditor::getEditorHolder() {
+	return editorHolder;
+}
+
+
+void PolycodeEditor::handleEvent(Event *event) {    
+    
 	if(event->getDispatcher() == CoreServices::getInstance()->getCore() && enabled) {
 		switch(event->getEventCode()) {
 
 			// Only copypaste of more complex IDE entities is handled here.
 			// Pure text copy/paste is handled in:
 			// Modules/Contents/UI/Source/PolyUITextInput.cpp
+			case Core::EVENT_SELECT_ALL:
+			{
+                selectAll();
+            }
+            break;
 			case Core::EVENT_COPY:
 			{
 				void *data = NULL;
@@ -92,11 +112,11 @@ void PolycodeEditor::handleEvent(Event *event) {
 			break;
 			case Core::EVENT_UNDO:
 			{
-				if(editorActions.size() > 0) {
+				if(editorActions.size() > 0 && currentUndoPosition >= 0) {
 				doAction(editorActions[currentUndoPosition].actionName, editorActions[currentUndoPosition].beforeData);
 				currentUndoPosition--;
-				if(currentUndoPosition < 0) {
-					currentUndoPosition = 0;
+				if(currentUndoPosition < -1) {
+					currentUndoPosition = -1;
 				}
 				}				
 			}
@@ -119,18 +139,22 @@ void PolycodeEditor::handleEvent(Event *event) {
 
 void PolycodeEditor::didAction(String actionName, PolycodeEditorActionData *beforeData, PolycodeEditorActionData *afterData, bool setFileChanged) {
 
-//	printf("DID ACTION: %s\n", actionName.c_str());
+//	printf("DID ACTION (pos: %d): %s\n", currentUndoPosition, actionName.c_str());
 	
 	if(setFileChanged) {
 		setHasChanges(true);
 	}
 	
 	// if the undo position is not at the end, remove the states after it
-	if(currentUndoPosition < editorActions.size()-1 && editorActions.size() > 0) {
+	if(currentUndoPosition < (int)(editorActions.size())-1 && editorActions.size() > 0) {
 		for(int i=currentUndoPosition+1; i < editorActions.size(); i++) {
 			editorActions[i].deleteData();		
 		}
-		editorActions.erase(editorActions.begin()+currentUndoPosition+1, editorActions.end());
+        if(currentUndoPosition > -1) {
+            editorActions.erase(editorActions.begin()+currentUndoPosition+1, editorActions.end());
+        } else {
+            editorActions.clear();
+        }
 	}
 
 	PolycodeEditorAction newAction;
@@ -144,16 +168,25 @@ void PolycodeEditor::didAction(String actionName, PolycodeEditorActionData *befo
 		editorActions.erase(editorActions.begin());
 	}
 	
-	currentUndoPosition = editorActions.size()-1;	
+	currentUndoPosition = editorActions.size()-1;
 }
 
 void PolycodeEditor::Resize(int x, int y) {
 	editorSize = Vector2(x,y);
-	Vector2 pos = getScreenPosition();
+	Vector2 pos = getScreenPositionForMainCamera();
 	scissorBox.setRect(pos.x,pos.y, x, y);	
 }
 
 PolycodeEditor::~PolycodeEditor() {
+	if(editorHolder) {
+		editorHolder->setEditor(NULL);
+	}
+    
+    if(globalClipboard->getCurrentProvider() == this) {
+        destroyClipboardData(globalClipboard->getData(), globalClipboard->getType());
+        globalClipboard->setCurrentProvider(NULL);
+    }
+    
 	Core *core = CoreServices::getInstance()->getCore();
 	core->removeAllHandlersForListener(this);
 }

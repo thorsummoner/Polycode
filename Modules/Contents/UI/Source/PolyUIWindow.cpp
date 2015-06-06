@@ -25,18 +25,22 @@
 #include "PolyConfig.h"
 #include "PolyInputEvent.h"
 #include "PolyLabel.h"
+#include "PolyCore.h"
 #include "PolyCoreServices.h"
+#include "PolyTweenManager.h"
+#include "PolyRenderer.h"
 
 using namespace Polycode;
 
 
-UIWindow::UIWindow(String windowName, Number width, Number height) : ScreenEntity(), windowTween(NULL) {
+UIWindow::UIWindow(String windowName, Number width, Number height) : UIElement() {
 	closeOnEscape = false;
 	
 	snapToPixels = true;
 	
 	Config *conf = CoreServices::getInstance()->getConfig();	
-	
+    Number uiScale = conf->getNumericValue("Polycode", "uiScale");
+    
 	String fontName = conf->getStringValue("Polycode", "uiWindowTitleFont");
 	int fontSize = conf->getNumericValue("Polycode", "uiWindowTitleFontSize");	
 	
@@ -61,23 +65,29 @@ UIWindow::UIWindow(String windowName, Number width, Number height) : ScreenEntit
 	Number titleBarHeight = conf->getNumericValue("Polycode", "uiWindowTitleBarHeight");
 	Number titleBarOffset = conf->getNumericValue("Polycode", "uiWindowTitleBarOffset");
 		
-	titlebarRect = new ScreenShape(ScreenShape::SHAPE_RECT, width, titleBarHeight);
+	titlebarRect = new Entity();
+    titlebarRect->setWidth(width);
+    titlebarRect->setHeight(titleBarHeight);
+    titlebarRect->visible = false;
 	titlebarRect->setPosition(0, titleBarOffset);
-	titlebarRect->setColor(0,0,0,0);
-	titlebarRect->setPositionMode(ScreenEntity::POSITION_TOPLEFT);
+	titlebarRect->setAnchorPoint(-1.0, -1.0, 0.0);
 	titlebarRect->processInputEvents = true;
 	addChild(titlebarRect);
 	
-	titleLabel = new ScreenLabel(windowName, fontSize, fontName, Label::ANTIALIAS_FULL);
+	titleLabel = new SceneLabel(windowName, fontSize, fontName, Label::ANTIALIAS_FULL);
+    titleLabel->setBlendingMode(Renderer::BLEND_MODE_NORMAL);
+    
 	titleLabel->setPosition(conf->getNumericValue("Polycode", "uiWindowTitleX"),conf->getNumericValue("Polycode", "uiWindowTitleY"));
 	addChild(titleLabel);
 	titleLabel->color.setColorHexFromString(conf->getStringValue("Polycode", "uiWindowFontColor"));
-		
-	closeBtn = new UIImageButton(conf->getStringValue("Polycode", "uiWindowCloseIcon"));
+	titleLabel->positionAtBaseline = false;
+	titleLabel->setAnchorPoint(-1.0, -1.0, 0.0);
+			
+	closeBtn = new UIImageButton(conf->getStringValue("Polycode", "uiWindowCloseIcon"), uiScale);
 	addChild(closeBtn);
 	closeIconX = conf->getNumericValue("Polycode", "uiCloseIconX");
 	closeIconY = conf->getNumericValue("Polycode", "uiCloseIconY");
-		
+	
 	closeBtn->setPosition(width-closeBtn->getWidth()-closeIconX, closeIconY);	
 	
 	titlebarRect->addEventListener(this, InputEvent::EVENT_MOUSEUP);
@@ -85,9 +95,10 @@ UIWindow::UIWindow(String windowName, Number width, Number height) : ScreenEntit
 	titlebarRect->addEventListener(this, InputEvent::EVENT_MOUSEDOWN);
 	closeBtn->addEventListener(this, UIEvent::CLICK_EVENT);
 	
-	this->width = width;
-	this->height = height;
-	setHitbox(width, height);
+	CoreServices::getInstance()->getCore()->getInput()->addEventListener(this, InputEvent::EVENT_KEYDOWN);
+	
+	setWidth(width);
+	setHeight(height);
 	
 	focusable = true;
 	blockMouseInput = true;
@@ -106,18 +117,18 @@ void UIWindow::setWindowSize(Number w, Number h) {
 	windowRect->resizeBox(w, h);
 	setWidth(w);
 	setHeight(h);	
-	closeBtn->setPosition(width-closeBtn->getWidth()-closeIconX, closeIconY);	
+	closeBtn->setPosition(getWidth()-closeBtn->getWidth()-closeIconX, closeIconY);	
 	matrixDirty = true;
 }
 
 UIWindow::~UIWindow() {
 	if(!ownsChildren) {
-		delete windowTween;
 		delete windowRect;
 		delete titlebarRect;
 		delete titleLabel;
 		delete closeBtn;
 	}
+	CoreServices::getInstance()->getCore()->getInput()->removeAllHandlersForListener(this);
 }
 
 void UIWindow::onKeyDown(PolyKEY key, wchar_t charCode) {
@@ -146,36 +157,36 @@ void UIWindow::onMouseDown(Number x, Number y) {
 	if(hasFocus)
 		return;
 	hasFocus = true;
-	//dispatchEvent(new ScreenEvent(), ScreenEvent::ENTITY_MOVE_TOP);
-	for(int i=0; i < children.size(); i++) {
-		if(((ScreenEntity*)children[i])->isFocusable()) {
-			focusChild(((ScreenEntity*)children[i]));
-			return;
-		}
+
+	if(focusChildren.size() > 0) {
+		focusChild(focusChildren[0]);
 	}
 }
 
 void UIWindow::showWindow() {
-	if (windowTween)
-		delete windowTween;
-
 	enabled = true;
 	visible = true;
-	tweenClosing = false;
-	windowTween = new Tween(&color.a, Tween::EASE_IN_QUAD, 0.0f, 1.0f, 0.01f, false, true);
-	windowTween->addEventListener(this, Event::COMPLETE_EVENT);
 }
 
 void UIWindow::hideWindow() {
-	if (windowTween)
-		delete windowTween;
+	visible = false;
+	enabled = false;
+}
 
-	tweenClosing = true;
-	windowTween = new Tween(&color.a, Tween::EASE_IN_QUAD, 1.0f, 0.0f, 0.01f, false, true);
-	windowTween->addEventListener(this, Event::COMPLETE_EVENT);
+void UIWindow::onClose() {
+    visible = false;
+    enabled = false;
 }
 
 void UIWindow::handleEvent(Event *event) {
+
+	if(event->getDispatcher() == CoreServices::getInstance()->getCore()->getInput()) {
+		InputEvent *inputEvent = (InputEvent*)event;
+		if(event->getEventCode() == InputEvent::EVENT_KEYDOWN) {
+			onKeyDown(inputEvent->key, inputEvent->charCode);
+		}
+	}
+
 	if(event->getDispatcher() == titlebarRect) {
 		InputEvent *inputEvent = (InputEvent*)event;
 		switch(event->getEventCode()) {
@@ -191,13 +202,5 @@ void UIWindow::handleEvent(Event *event) {
 	if(event->getDispatcher() == closeBtn) {
 		onClose();
 		dispatchEvent(new UIEvent(), UIEvent::CLOSE_EVENT);
-	}
-	if(event->getDispatcher() == windowTween) {
-		if (tweenClosing) {
-			visible = false;
-			enabled = false;
-		}
-		
-		windowTween = NULL;
 	}
 }

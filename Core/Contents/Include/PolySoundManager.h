@@ -23,6 +23,7 @@
 #pragma once
 #include "PolyGlobals.h"
 #include "PolyVector3.h"
+#include "PolySound.h"
 
 #if defined(__APPLE__) && defined(__MACH__)
     #include <OpenAL/al.h>
@@ -37,6 +38,7 @@ namespace Polycode {
 	/**
 	* Controls global sound settings.
 	*/
+    
 	class _PolyExport SoundManager : public PolyBase{
 	public:
 		SoundManager();
@@ -45,16 +47,28 @@ namespace Polycode {
 		void setListenerPosition(Vector3 position);
 		void setListenerOrientation(Vector3 orientation, Vector3 upVector);	
 		void initAL();
+        
+        bool recordSound(unsigned int rate, unsigned int sampleSize);
+        Sound *stopRecording(bool generateFloatBuffer = false);
+
+        void Update();
 		
 		/**
 		* Sets the global sound volume.
 		*/ 
 		void setGlobalVolume(Number globalVolume);
-		
+        
+        void registerStreamingSound(Sound *sound);
+        void unregisterStreamingSound(Sound *sound);
 		
 	protected:
 		
+        std::vector<Sound*> streamingSounds;
 		ALCdevice* device;
+        ALCdevice* captureDevice;
+        ALbyte *recordingBuffer;
+        int recordingBufferSize;
+        int recordingBufferRate;
 		ALCcontext* context;		
 	};
 }

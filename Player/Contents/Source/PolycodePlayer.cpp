@@ -24,7 +24,7 @@ THE SOFTWARE.
 #include <string>
 
 PolycodeRemoteDebuggerClient::PolycodeRemoteDebuggerClient() : EventDispatcher() {
-	client = new Client(6445, 1);
+	client = new Client(0, 1);
 	client->Connect("127.0.0.1", 4630);	
 	client->addEventListener(this, ClientEvent::EVENT_SERVER_DISCONNECTED);
 }
@@ -101,7 +101,7 @@ extern "C" {
 		defaultPath.append(module);
 		
 		const char* fullPath = module.c_str();		
-//		Logger::log("Loading custom class: %s\n", module.c_str());
+        Logger::log("Loading custom class: %s\n", module.c_str());
 
 		OSFILE *inFile = OSBasics::open(module, "r");	
 		
@@ -367,9 +367,9 @@ extern "C" {
 		luaopen_Physics2D(L);
 		luaopen_Physics3D(L);
 		luaopen_UI(L);
-		
-				
-		/*		
+        
+        printf("CORE SERVICES: %d\n", CoreServices::getInstance());
+
 		for(int i=0; i < loadedModules.size(); i++) {
 			String moduleName = loadedModules[i];
 #ifdef _WINDOWS
@@ -398,24 +398,15 @@ extern "C" {
 			lua_pushstring(L, moduleLoadCall.c_str());			
 			lua_call(L, 2, 2);
 			
-			lua_setfield(L, LUA_GLOBALSINDEX, "err");								
-			lua_setfield(L, LUA_GLOBALSINDEX, "f");		
-
-//			lua_getfield(L, LUA_GLOBALSINDEX, "print");
-//			lua_getfield(L, LUA_GLOBALSINDEX, "err");						
-//			lua_call(L, 1, 0);						
-
+			lua_setfield(L, LUA_GLOBALSINDEX, "err");
+			lua_setfield(L, LUA_GLOBALSINDEX, "f");
 			printf("SETTING CORE SERVICES\n");			
 			lua_getfield(L, LUA_GLOBALSINDEX, "f");
-			lua_getfield(L, LUA_GLOBALSINDEX, "__core__services__instance");						
+			lua_getfield(L, LUA_GLOBALSINDEX, "__core__services__instance");
 			lua_call(L, 1, 0);			
 			
-			printf("DONE LOADING MODULE...\n");				
-			//local f = package.loadlib("/Users/ivansafrin/Desktop/Workshop/HelloPolycodeLUA/libPolycode2DPhysicsModule.dylib", "luaopen_Physics2D")
-			//f(Polycore.CoreServices_getInstance())
-					
+			printf("DONE LOADING MODULE...\n");
 		}
-*/
 
 		doneLoading = true;
 		
@@ -891,7 +882,7 @@ void PolycodePlayer::handleEvent(Event *event) {
 
 
 bool PolycodePlayer::Update() {
-	bool retVal = core->Update();
+	bool retVal = core->systemUpdate();
 	if(L) {
 		lua_getfield (L, LUA_GLOBALSINDEX, "__customError");
 		errH = lua_gettop(L);	
@@ -902,7 +893,6 @@ bool PolycodePlayer::Update() {
 			lua_pcall(L, 0,0,errH);		
 		}	
 		if(!crashed) {
-		
 			lua_getfield(L, LUA_GLOBALSINDEX, "__process_safe_delete");
 			lua_pcall(L, 0,0,errH);	
 		
@@ -910,6 +900,12 @@ bool PolycodePlayer::Update() {
 			lua_pushnumber(L, core->getElapsed());
 			lua_pcall(L, 1,0,errH);
 		}
+        
+        while(core->fixedUpdate()) {
+			lua_getfield(L, LUA_GLOBALSINDEX, "fixedUpdate");
+			lua_pcall(L, 0,0,errH);
+        }
+        
 		lua_settop(L, 0);
 	}
 	core->Render();

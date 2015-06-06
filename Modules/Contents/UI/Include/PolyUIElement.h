@@ -22,7 +22,9 @@
 
 #pragma once
 #include "PolyGlobals.h"
-#include "PolyScreenEntity.h"
+#include "PolyEntity.h"
+#include "PolySceneImage.h"
+#include "PolySceneLabel.h"
 
 namespace Polycode {
 	/*
@@ -30,16 +32,150 @@ namespace Polycode {
 	 *
 	 * processInputEvent is set to true by default.
 	 */
-	class _PolyExport UIElement : public ScreenEntity {
+	class _PolyExport UIElement : public Entity {
 		public:
 			UIElement();
 			UIElement(Number width, Number height);
-			~UIElement();
+			virtual ~UIElement();
 			
 			virtual void Resize(Number width, Number height);
+						
+			bool hasFocus;
+			bool focusable;
 			
+			void addChild(Entity *child);
+			
+			void setDragLimits(Rectangle rect);
+			void clearDragLimits();
+			bool isDragged();
+			void startDrag(Number xOffset, Number yOffset);
+			void stopDrag();
+			
+			void focusChild(UIElement *child);
+			void focusNextChild();
+			bool isFocusable();
+			void focusSelf();
+									
+			virtual void onLoseFocus() {}
+			virtual void onGainFocus() {}
+			
+			void addFocusChild(UIElement *element);			
+			void setFocusParent(UIElement *element);
+
+			MouseEventResult onMouseMove(const Ray &ray, int timestamp);
+
+			bool dragged;
+			
+			static UIElement *globalFocusedChild;
+
 		protected:
+		
+			Polycode::Rectangle dragLimits;
+			bool hasDragLimits;
+		
+			Number dragOffsetX;
+			Number dragOffsetY;
 			
+			std::vector<UIElement*> focusChildren;
+			UIElement *focusParent;
+			
+	};
+
+	class _PolyExport UIRect : public UIElement {
+		public:
+			UIRect(String fileName);
+            UIRect(String fileName, Number width, Number height);
+			UIRect(Number width, Number height);
+			void initRect(Number width, Number height);
+			~UIRect();
+			void Resize(Number width, Number height);
+			void Render();
+			void loadTexture(String fileName);
+			void setTexture(Texture *texture);
+			void setImageCoordinates(Number x, Number y, Number width, Number height, Number imageScale = 1.0);
+			Number getImageWidth() const;
+			Number getImageHeight() const;
+        
+			Texture *getTexture();			
+		protected:
+		
+			Number imageWidth;
+			Number imageHeight;
+			
+			Mesh *rectMesh;
+			Texture *texture;
+			
+	};
+	
+	class _PolyExport UILabel : public UIElement {
+		public:
+			UILabel(const String& text, int size, const String& fontName = "sans", int amode = 0);			
+			void setText(const String& text);
+			Label *getLabel();
+			String getText();
+			
+			~UILabel();			
+		protected:
+			SceneLabel *label;
+	};
+    
+	class _PolyExport UIMultilineLabel : public UIElement {
+    public:
+        UIMultilineLabel(const String& text, int size, int spacing, const String& fontName = "sans", int amode = 0);
+        void setText(const String& text);
+        String getText();
+        
+		/**
+		* Sets the color of the Labels as normalized floating point values.
+		* @param r Red value as a 0-1 floating point number.
+		* @param g Green value as a 0-1 floating point number.
+		* @param b Blue value as a 0-1 floating point number.
+		* @param a Alpha value as a 0-1 floating point number.
+		*/
+		void setColor(Number r, Number g, Number b, Number a);
+
+		/**
+		* Sets the color of the entity as 0-255 integers.
+		* @param r Red value as a 0-255 integer.
+		* @param g Green value as a 0-255 integer.
+		* @param b Blue value as a 0-255 integer.
+		* @param a Alpha value as a 0-255 integer.
+		*/
+		void setColorInt(int r, int g, int b, int a);
+
+		/**
+		* Sets the color of the entity.
+		* @param color Color to set the entity color to.
+		*/
+		void setColor(Color color);
+
+		/**
+		* @return the max width as a Number
+		*/
+		Number getWidth();
+
+		/**
+		* @return the max height as a Number
+		*/
+		Number getHeight();
+
+        ~UIMultilineLabel();
+    protected:
+        
+        int labelSize;
+        String labelFontName;
+        int labelAAMode;
+        int spacing;
+		int linesCount;
+
+        void clearLabels();
+        std::vector<UILabel*> labels;
+	};
+    	
+	class _PolyExport UIImage : public UIRect {
+		public:
+			UIImage(String imagePath);
+            UIImage(String imagePath, int width, int height);
 	};
 	
 }
