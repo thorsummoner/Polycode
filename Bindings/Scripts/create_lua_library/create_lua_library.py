@@ -1,3 +1,9 @@
+#!/usr/bin/env python2
+
+"""
+	Lua api generator.
+"""
+
 import sys
 import CppHeaderParser
 import os
@@ -7,6 +13,26 @@ from zipfile import *
 import fnmatch
 import re
 import textwrap
+import argparse
+
+
+ARGP = argparse.ArgumentParser(
+    description=__doc__,
+    formatter_class=argparse.RawTextHelpFormatter,
+)
+
+ARGP.add_argument('input-path', help='input path')
+ARGP.add_argument('prefix', help='prefix')
+ARGP.add_argument('main-include', help='main include')
+ARGP.add_argument('lib-small-name', help='lib small name')
+ARGP.add_argument('lib-name', help='lib name')
+ARGP.add_argument('api-path', help='api path')
+ARGP.add_argument('api-class-path', help='api class-path')
+ARGP.add_argument('include-path', help='include path')
+ARGP.add_argument('source-path', help='source path')
+
+ARGP.add_argument('--lua-doc-path', help='lua doc path')
+ARGP.add_argument('--inherit-in-module-file-path', help='inherit-in-module-file path')
 
 def mkdir_p(path): # Same effect as mkdir -p, create dir and all necessary parent dirs
 	try:
@@ -80,6 +106,41 @@ def typeFilter(ty):
 	ty = ty.replace("double", "Number")
 	ty = ty.replace(" ", "") # Not very safe!
 	return ty
+
+class LuaBindings(object):
+	def main(self, argp=None):
+
+		if argp is None:
+			argp = ARGP.parse_args()
+
+		self.argp = argp
+
+		self.inputPath            = argp.input_path
+		self.prefix               = argp.prefix
+		self.mainInclude          = argp.main_include
+		self.libSmallName         = argp.lib_small_name
+		self.libName              = argp.lib_name
+		self.apiPath              = argp.api_path
+		self.apiClassPath         = argp.api_class_path
+		self.includePath          = argp.include_path
+		self.sourcePath           = argp.source_path
+		self.luaDocPath           = argp.lua_doc_path
+		self.inheritInModuleFiles = argp.inherit_in_module_file_path
+
+		createLUABindings(
+			self.inputPath,
+			self.prefix,
+			self.mainInclude,
+			self.libSmallName,
+			self.libName,
+			self.apiPath,
+			self.apiClassPath,
+			self.includePath,
+			self.sourcePath,
+			self.luaDocPath,
+			self.inheritInModuleFiles,
+		)
+
 
 def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, apiPath, apiClassPath, includePath, sourcePath, luaDocPath, inheritInModuleFiles):
 	wrappersHeaderOut = "" # Def: Global C++ *LUAWrappers.h
@@ -865,8 +926,5 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 				for filename in fnmatch.filter(files, pattern):
 					myzip.write(os.path.join(root, filename))
 
-if len(sys.argv) < 10:
-	print ("Usage:\n%s [input path] [prefix] [main include] [lib small name] [lib name] [api path] [api class-path] [include path] [source path] [lua doc path (optional) (or - for omit)] [inherit-in-module-file path (optional)]" % (sys.argv[0]))
-	sys.exit(1)
-else:
-	createLUABindings(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7], sys.argv[8], sys.argv[9], sys.argv[10] if len(sys.argv)>10 else None, sys.argv[11] if len(sys.argv)>11 else None)
+if __name__ == '__main__':
+	LuaBindings().main(argp)
