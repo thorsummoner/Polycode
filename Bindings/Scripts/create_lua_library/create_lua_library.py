@@ -6,6 +6,7 @@ import re
 from zipfile import *
 import fnmatch
 import re
+import textwrap
 
 def mkdir_p(path): # Same effect as mkdir -p, create dir and all necessary parent dirs
 	try:
@@ -15,15 +16,23 @@ def mkdir_p(path): # Same effect as mkdir -p, create dir and all necessary paren
 			pass
 		else: raise
 
-def template_returnPtrLookupArray(prefix, className, ptr):
-	out = "%sif %s == nil then return nil end\n" % (prefix, ptr)
-	out += "%sfor i=1,count(%s) do\n" % (prefix, ptr)
-	out += "%s\tlocal __c  = _G[%s](\"__skip_ptr__\")\n" % (prefix, className.replace("*", ""))
-	out += "%s\t__c.__ptr = %s[i]\n" % (prefix, ptr)
-	out += "%s\t%s[i] = __c\n" % (prefix, ptr)
-	out += "%send\n" % (prefix)
-	out += "%sreturn %s\n" % (prefix,ptr)
-	return out
+class LuaBlocks(object):
+	@staticmethod
+	def PtrLookupArray(prefix, className, ptr):
+		block = textwrap.dedent("""\
+			if {ptr} == nil then return nil end
+			for i=1,count({ptr}) do
+				local __c  = _G[{classname}]("__skip_ptr__")
+				__c.__ptr = {ptr}[i]
+				{ptr}[i] = __c
+			end
+			return {ptr}
+		""").format(
+			classname=className.replace("*", ""),
+			ptr=ptr,
+		).replace('\n', prefix.strip('\n') + '\n')
+
+		return block
 
 # Note we expect className to be a valid string
 def template_returnPtrLookup(prefix, className, ptr):
@@ -32,7 +41,7 @@ def template_returnPtrLookup(prefix, className, ptr):
 	out += "%s__c.__ptr = %s\n" % (prefix, ptr)
 	out += "%sreturn __c\n" % (prefix)
 	return out
-	
+
 def template_quote(str):
 	return "\"%s\"" % str;
 
@@ -69,10 +78,10 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 	wrappersHeaderOut = "" # Def: Global C++ *LUAWrappers.h
 	cppRegisterOut = "" # Def: Global C++ *LUA.cpp
 	cppLoaderOut = "" # Def: Global C++ *LUA.cpp
-	luaDocOut = ""	
+	luaDocOut = ""
 
 	luaIndexOut = "" # Def: Global Lua everything-gets-required-from-this-file file
-	
+
 	# Header boilerplate for wrappersHeaderOut and cppRegisterOut
 	cppRegisterOut += "#include \"%sLUA.h\"\n" % (prefix)
 	cppRegisterOut += "#include \"%sLUAWrappers.h\"\n" % (prefix)
@@ -84,7 +93,7 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 		cppRegisterOut += "CoreServices *inst = (CoreServices*) *((PolyBase**)lua_touserdata(L, 1));\n"
 		cppRegisterOut += "CoreServices::setInstance(inst);\n"
 	cppRegisterOut += "\tstatic const struct luaL_reg %sLib [] = {" % (libSmallName)
-	
+
 	wrappersHeaderOut += "#pragma once\n\n"
 
 	wrappersHeaderOut += "extern \"C\" {\n\n"
@@ -124,7 +133,7 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 
 	wrappersHeaderOut += "\nusing namespace std;\n\n"
 	wrappersHeaderOut += "\nnamespace Polycode {\n\n"
-	
+
 
 	# list of classes that don't get the garbage collection in their meta table
 
@@ -150,12 +159,12 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 		wrappersHeaderOut += "	int wrapperIndex;\n"
 		wrappersHeaderOut += "	lua_State *L;\n"
 		wrappersHeaderOut += "};\n\n"
-	
+
 	# Iterate, process each input file
 	for fileName in filteredFiles:
 		# "Package owned" classes that ship with Polycode
 		inheritInModule = ["PhysicsEntity", "CollisionScene", "CollisionEntity", "UIElement", "UIWindow", "UIMenuItem", "UIImage", "UIRect"]
-		
+
 		# A file or comma-separated list of files can be given to specify classes which are "package owned"
 		# and should not be inherited out of Polycode/. The files should contain one class name per line,
 		# and the class name may be prefixed with a path (which will be ignored).
@@ -164,7 +173,7 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 				with open(moduleFileName) as f:
 					for line in f.readlines():
 						inheritInModule.append(line.strip().split("/",1)[-1]) # Strip whitespace, path/
-		
+
 		print("Parsing %s" % fileName)
 		try: # One input file parse.
 			f = open(fileName) # Def: Input file handle
@@ -173,7 +182,7 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 			ignore_classes = ["PolycodeShaderModule", "Object", "Threaded", "OpenGLCubemap", "PolyBase", "Matrix4::union "]
 
 			# Iterate, check each class in this file.
-			for ckey in cppHeader.classes: 
+			for ckey in cppHeader.classes:
 				print(">> Parsing class %s" % ckey)
 				c = cppHeader.classes[ckey] # Def: The class structure
 
@@ -206,7 +215,7 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 				if len(c["inherits"]) > 0:
 					if c["inherits"][0]["class"] != "PolyBase":
 						extendString = " extends=\"%s\"" % (c["inherits"][0]["class"])
-				
+
 				luaDocOut += "\t<class name=\"%s\"%s>\n" % (ckey, extendString)
 
 				if 'doxygen' in c:
@@ -214,7 +223,7 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 
 				if ckey in disable_gc:
 					luaDocOut += "\t\t<class_notes>NOTE: %s instances are not automatically garbage collected.</class_notes>\n" % (ckey)
-				
+
 				parsed_methods = [] # Def: List of discovered methods
 				ignore_methods = ["readByte32", "readByte16", "getCustomEntitiesByType", "Core", "Renderer", "Shader", "Texture", "handleEvent", "secondaryHandler", "getSTLString", "readInt"]
 				luaClassBindingOut += "\n\n"
@@ -229,13 +238,13 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 					if pp["type"].find("static ") != -1: # If static. FIXME: Static doesn't work?
 						if "defaltValue" in pp: # FIXME: defaltValue is misspelled.
 							defaltValue = pp["defaltValue"]
-							
+
 							# The "Default Value" is more or less a literal C++ string. This causes a problem:
 							# Frequently we say static const int A = 1; static const int B = A + 1.
 							# Put in a one-off hack to ensure namespacing works in this special case.
 							if re.match(r'\s*[a-zA-Z_][a-zA-Z0-9_]*\s*\+', defaltValue):
 								defaltValue = "%s.%s" % (ckey, defaltValue)
-							
+
 							luaClassBindingOut += "%s.%s = %s\n" % (ckey, pp["name"], defaltValue)
 							luaDocOut += "\t\t\t<static_member name=\"%s\" type=\"%s\" value=\"%s\">\n" % (pp["name"],  toLuaType(typeFilter(pp["type"])), pp["defaltValue"])
 							if 'doxygen' in pp:
@@ -260,7 +269,7 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 				if len(classProperties) > 0: # If there are properties, add index lookup to the metatable
 					luaClassBindingOut += "function %s:__getvar(name)\n" % ckey
 					# Iterate over property structures, creating if/else clauses for each.
-					# TODO: Could a table be more appropriate for 
+					# TODO: Could a table be more appropriate for
 					for pp in classProperties:
 						if pp["name"] == "" or pp["array"] == 1:
 							continue
@@ -278,23 +287,23 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 						# If type is a primitive such as Number/String/int/bool
 						if pp["type"] == "PolyKEY" or pp["type"] == "Number" or  pp["type"] == "String" or pp["type"] == "int" or pp["type"] == "bool":
 							luaClassBindingOut += "\t\treturn %s.%s_get_%s(self.__ptr)\n" % (libName, ckey, pp["name"])
-							
+
 						# If type is a particle emitter, specifically #SPEC
 						elif (ckey == "ScreenParticleEmitter" or ckey == "SceneParticleEmitter") and pp["name"] == "emitter":
 							luaClassBindingOut += "\t\tlocal ret = %s(\"__skip_ptr__\")\n" % (pp["type"])
 							luaClassBindingOut += "\t\tret.__ptr = self.__ptr\n"
 							luaClassBindingOut += "\t\treturn ret\n"
-							
+
 						# If type is a class
 						else:
 							luaClassBindingOut += "\t\tlocal retVal = %s.%s_get_%s(self.__ptr)\n" % (libName, ckey, pp["name"])
 							luaClassBindingOut += template_returnPtrLookup("\t\t", template_quote(pp["type"]), "retVal")
 
-						
+
 						luaDocOut += "\t\t\t<member name=\"%s\" type=\"%s\">\n" % (pp["name"],  toLuaType(typeFilter(pp["type"])))
 						if 'doxygen' in pp:
 							luaDocOut += "\t\t\t\t<desc><![CDATA[%s]]></desc>\n" % (cleanDocs(pp['doxygen']))
-						
+
 						luaDocOut += "\t\t\t</member>\n"
 
 						# Generate C++ side of binding:
@@ -331,7 +340,7 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 									wrappersHeaderOut += "\t*userdataPtr = (PolyBase*)&inst->%s%s;\n" % (pp["name"], retFunc)
 							wrappersHeaderOut += "\treturn 1;\n"
 							wrappersHeaderOut += "}\n\n"
-						
+
 						# Success
 						pidx = pidx + 1
 					if numGetVars != 0:
@@ -345,16 +354,16 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 				luaDocOut += "\t\t</members>\n"
 
 				luaClassBindingOut += "\n\n"
-				
+
 				# Iterate over properties again, creating setters
-				pidx = 0 # Def: Count of 
+				pidx = 0 # Def: Count of
 				if len(classProperties) > 0: # If there are properties, add index setter to the metatable
 					luaClassBindingOut += "function %s:__setvar(name,value)\n" % ckey
 					for pp in classProperties:
 						if pp["name"] == "" or pp["array"] == 1:
 							continue
 						pp["type"] = typeFilter(pp["type"])
-						
+
 						# If type is a primitive: Create lua and C++ sides at the same time.
 						if pp["type"] == "Number" or  pp["type"] == "String" or pp["type"] == "int" or pp["type"] == "bool" or pp["type"] == "PolyKEY":
 							if pidx == 0:
@@ -397,7 +406,7 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 									luaClassBindingOut += "\telseif name == \"%s\" then\n" % (pp["name"])
 								luaClassBindingOut += "\t\t%s.%s_set_%s(self.__ptr, value.__ptr)\n" % (libName, ckey, pp["name"])
 								luaClassBindingOut += "\t\treturn true\n"
-							
+
 								cppRegisterOut += "\t\t{\"%s_set_%s\", %s_%s_set_%s},\n" % (ckey, pp["name"], libName, ckey, pp["name"])
 								wrappersHeaderOut += "static int %s_%s_set_%s(lua_State *L) {\n" % (libName, ckey, pp["name"])
 								wrappersHeaderOut += "\tluaL_checktype(L, 1, LUA_TUSERDATA);\n"
@@ -408,7 +417,7 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 								wrappersHeaderOut += "\treturn 0;\n"
 								wrappersHeaderOut += "}\n\n"
 								pidx = pidx + 1 # Success
-							
+
 						# Notice: Setters for object types are not created.
 					if pidx != 0:
 						luaClassBindingOut += "\tend\n"
@@ -424,7 +433,7 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 
 				# Iterate over methods
 				luaClassBindingOut += "\n\n"
-				
+
 				luaDocOut += "\t\t<methods>\n"
 
 				for pm in c["methods"]["public"]:
@@ -438,11 +447,11 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 					# TODO: Special-case certain kind of vector<>s?
 					if pm["name"] == "~"+ckey or pm["name"] == "CoreServices":
 						continue
-					
+
 					staticString = ""
 					if pm["rtnType"].find("static ") != -1:
 						staticString = " static=\"true\""
-					
+
 					if pm["rtnType"].find("std::vector") > -1:
 						vectorReturnClass = pm["rtnType"].replace("std::vector<", "").replace(">","").replace(" ", "")
 						luaDocOut += "\t\t\t<method name=\"%s\" return_array=\"true\" return_type=\"%s\"%s>\n" % (pm["name"],  toLuaType(typeFilter(vectorReturnClass).replace("*", "")), staticString)
@@ -456,10 +465,10 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 						else:
 							docs = cleanDocs(pm['doxygen']).split("@param")
 						luaDocOut += "\t\t\t\t<desc><![CDATA[%s]]></desc>\n" % (docs[0])
-						
+
 					if len(pm["parameters"]) > 0:
 						luaDocOut += "\t\t\t\t<params>\n"
-						
+
 						paramIndex = 0
 						for param in pm["parameters"]:
 							if "name" in param:
@@ -480,8 +489,8 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 								luaDocOut += "\t\t\t\t\t</param>\n"
 								paramIndex = paramIndex + 1
 						luaDocOut += "\t\t\t\t</params>\n"
-								
-						
+
+
 					luaDocOut += "\t\t\t</method>\n"
 
 					basicType = False
@@ -507,10 +516,10 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 							idx = 2
 						else:
 							idx = 1
-					
+
 					if rawMethod:
 						wrappersHeaderOut += "\treturn inst->%s(L);\n" % (pm["name"])
-					else:	
+					else:
 						# Generate C++ side parameter pushing
 						paramlist = []
 						lparamlist = []
@@ -519,7 +528,7 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 								continue
 							if param["type"] == "0":
 								continue
-								
+
 							param["type"] = typeFilter(param["type"])
 
 							param["name"] = param["name"].replace("end", "_end").replace("repeat", "_repeat")
@@ -605,7 +614,7 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 								wrappersHeaderOut += "\tinst->L = L;\n"
 							else:
 								wrappersHeaderOut += "\t%s *inst = new %s(%s);\n" % (ckey, ckey, ", ".join(paramlist))
-							
+
 							wrappersHeaderOut += "\tPolyBase **userdataPtr = (PolyBase**)lua_newuserdata(L, sizeof(PolyBase*));\n"
 							wrappersHeaderOut += "\t*userdataPtr = (PolyBase*)inst;\n"
 							wrappersHeaderOut += "\tluaL_getmetatable(L, \"%s.%s\");\n" % (libName, ckey)
@@ -634,7 +643,7 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 										wrappersHeaderOut += "\treturn 1;\n"
 									else:
 										wrappersHeaderOut += "\treturn 0;\n"
-										
+
 							# else If void-typed:
 							elif pm["rtnType"] == "void" or pm["rtnType"] == "static void" or pm["rtnType"] == "virtual void" or pm["rtnType"] == "inline void":
 								wrappersHeaderOut += "\t%s;\n" % (call)
@@ -718,9 +727,9 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 							luaClassBindingOut += "\t\tself.__ptr = %s.%s(unpack(arg))\n" % (libName, ckey)
 						luaClassBindingOut += "\tend\n"
 						luaClassBindingOut += "end\n\n"
-					else: # Non-constructors.						
+					else: # Non-constructors.
 						if pm["rtnType"].find("static ") == -1: # Non-static method
-							luaClassBindingOut += "function %s:%s(%s)\n" % (ckey, pm["name"], ", ".join(paramlist))						
+							luaClassBindingOut += "function %s:%s(%s)\n" % (ckey, pm["name"], ", ".join(paramlist))
 							if len(lparamlist):
 								luaClassBindingOut += "\tlocal retVal = %s.%s_%s(self.__ptr, %s)\n" % (libName, ckey, pm["name"], ", ".join(lparamlist))
 							else:
@@ -738,7 +747,7 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 							else: # Yes, a pointer was returned
 								if vectorReturn == True:
 									className = vectorReturnClass.replace("*", "")
-									luaClassBindingOut += template_returnPtrLookupArray("\t",template_quote(className),"retVal")
+									luaClassBindingOut += LuaBlocks.PtrLookupArray("\t",template_quote(className),"retVal")
 								else:
 									className = pm["rtnType"].replace("const", "").replace("&", "").replace("inline", "").replace("virtual", "").replace("static", "").replace("*","").replace(" ", "")
 									luaClassBindingOut += template_returnPtrLookup("\t",template_quote(className),"retVal")
@@ -749,7 +758,7 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 				luaDocOut += "\t\t</methods>\n"
 
 				# With methods out of the way, do some final cleanup:
-				
+
 				# user pointer metatable creation in C++
 				cppLoaderOut += "\n\tluaL_newmetatable(L, \"%s.%s\");\n" % (libName, ckey)
 				if ckey not in disable_gc:
@@ -772,7 +781,7 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 				luaClassBindingOut += "function %s:__delete()\n" % (ckey)
 				luaClassBindingOut += "\tif self then %s.delete_%s(self.__ptr) end\n" % (libName, ckey)
 				luaClassBindingOut += "end\n"
-					
+
 				# Add class to lua index file
 				luaIndexOut += "require \"%s/%s\"\n" % (prefix, ckey)
 				# Write lua file
@@ -782,7 +791,7 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 					fout.write(luaClassBindingOut)
 
 				luaDocOut += "\t</class>\n"
-	
+
 		except CppHeaderParser.CppParseError as e: # One input file parse; failed.
 			print(e)
 			sys.exit(1)
@@ -792,15 +801,15 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 
 	# Footer boilerplate for wrappersHeaderOut and cppRegisterOut.
 	wrappersHeaderOut += "} // namespace Polycode\n"
-	
+
 	cppRegisterOut += "\t\t{NULL, NULL}\n"
 	cppRegisterOut += "\t};\n"
 	cppRegisterOut += "\tluaL_openlib(L, \"%s\", %sLib, 0);\n" % (libName, libSmallName)
 	cppRegisterOut += cppLoaderOut
 	cppRegisterOut += "\treturn 1;\n"
 	cppRegisterOut += "}"
-	
-	
+
+
 	cppRegisterHeaderOut = "" # Def: Global C++ *LUA.h
 	cppRegisterHeaderOut += "#pragma once\n"
 	cppRegisterHeaderOut += "#include <%s>\n" % (mainInclude)
@@ -811,7 +820,7 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 	cppRegisterHeaderOut += "#include \"lauxlib.h\"\n"
 	cppRegisterHeaderOut += "int _PolyExport luaopen_%s(lua_State *L);\n" % (prefix)
 	cppRegisterHeaderOut += "}\n"
-	
+
 	# Write out global files
 	mkdir_p(includePath)
 	mkdir_p(apiPath)
@@ -828,13 +837,13 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 
 	fout = open("%s/%s.lua" % (apiPath, prefix), "w")
 	fout.write(luaIndexOut)
-	
+
 	fout = open("%s/%sLUAWrappers.h" % (includePath, prefix), "w")
 	fout.write(wrappersHeaderOut)
-	
+
 	fout = open("%s/%sLUA.cpp" % (sourcePath, prefix), "w")
 	fout.write(cppRegisterOut)
-	
+
 	# Create .pak zip archive
 	pattern = '*.lua'
 	os.chdir(apiPath)
