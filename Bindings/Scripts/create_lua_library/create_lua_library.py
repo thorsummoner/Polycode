@@ -22,7 +22,7 @@ class LuaBlocks(object):
 		block = textwrap.dedent("""\
 			if {ptr} == nil then return nil end
 			for i=1,count({ptr}) do
-				local __c  = _G[{classname}]("__skip_ptr__")
+				local __c  = _G["{classname}"]("__skip_ptr__")
 				__c.__ptr = {ptr}[i]
 				{ptr}[i] = __c
 			end
@@ -42,7 +42,7 @@ class LuaBlocks(object):
 
 	    block = textwrap.dedent("""\
 	        if {ptr} == nil then return nil end
-	        local __c = _G[{classname}]("__skip_ptr__")
+	        local __c = _G["{classname}"]("__skip_ptr__")
 	        __c.__ptr = {ptr}
 	        return __c
 	    """).format(
@@ -51,9 +51,6 @@ class LuaBlocks(object):
 	    ).replace('\n', prefix.strip('\n') + '\n')
 
 	    return block
-
-def template_quote(str):
-	return "\"%s\"" % str;
 
 def cleanDocs(docs):
 	return docs.replace("/*", "").replace("*/", "").replace("*", "").replace("\n", "").replace("\r", "").replace("::", ".").replace("\t", "")
@@ -307,7 +304,7 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 						# If type is a class
 						else:
 							luaClassBindingOut += "\t\tlocal retVal = %s.%s_get_%s(self.__ptr)\n" % (libName, ckey, pp["name"])
-							luaClassBindingOut += LuaBlocks.PtrLookup("\t\t", template_quote(pp["type"]), "retVal")
+							luaClassBindingOut += LuaBlocks.PtrLookup("\t\t", pp["type"], "retVal")
 
 
 						luaDocOut += "\t\t\t<member name=\"%s\" type=\"%s\">\n" % (pp["name"],  toLuaType(typeFilter(pp["type"])))
@@ -757,10 +754,10 @@ def createLUABindings(inputPath, prefix, mainInclude, libSmallName, libName, api
 							else: # Yes, a pointer was returned
 								if vectorReturn == True:
 									className = vectorReturnClass.replace("*", "")
-									luaClassBindingOut += LuaBlocks.PtrLookupArray("\t",template_quote(className),"retVal")
+									luaClassBindingOut += LuaBlocks.PtrLookupArray("\t",className,"retVal")
 								else:
 									className = pm["rtnType"].replace("const", "").replace("&", "").replace("inline", "").replace("virtual", "").replace("static", "").replace("*","").replace(" ", "")
-									luaClassBindingOut += LuaBlocks.PtrLookup("\t",template_quote(className),"retVal")
+									luaClassBindingOut += LuaBlocks.PtrLookup("\t",className,"retVal")
 						luaClassBindingOut += "end\n\n" # Close out Lua generation
 
 					parsed_methods.append(pm["name"]) # Method parse success
